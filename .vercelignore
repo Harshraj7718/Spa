@@ -1,0 +1,9 @@
+# Never upload these to Vercel
+.env
+.env.*
+!.env.example
+data/
+_old_static/
+node_modules/
+dist/
+.claude/

@@ -108,7 +108,16 @@ function Dashboard({ onSessionEnd }: { onSessionEnd: (msg?: string) => void }) {
     let refreshTimer: number | undefined;
     let unseen = 0;
     const src = new EventSource('/api/admin/stream');
-    src.onopen = () => setLive('on');
+    let connectedBefore = false;
+    src.onopen = () => {
+      setLive('on');
+      // After a reconnect (e.g. every ~55 s on Vercel), reload so nothing from the gap is missed
+      if (connectedBefore) {
+        setRefreshKey((k) => k + 1);
+        adminApi.events().then((r) => setEvents(r.events)).catch(() => {});
+      }
+      connectedBefore = true;
+    };
     src.onmessage = (msg) => {
       let e: AdminEvent;
       try { e = JSON.parse(msg.data) as AdminEvent; } catch { return; }

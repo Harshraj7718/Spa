@@ -124,14 +124,41 @@ function customerError(c) {
 
 // ---------- Live updates for the admin dashboard ----------
 // Every saved change is logged in "events" and pushed to open dashboards straight away.
+//  • On Atlas (and on Vercel) each dashboard connection watches the events collection with a
+//    MongoDB change stream, so it works no matter which copy of the server saved the event.
+//  • On a plain local MongoDB (no change streams) this server pushes its own events directly.
 const liveClients = new Set();
+const sseLine = (event) => `data: ${JSON.stringify({ ...event, _id: String(event._id || '') })}\n\n`;
 async function logEvent(type, message, ref = {}) {
   const event = { type, message, ref, at: new Date() };
   try { await col('events').insertOne(event); } catch (e) { console.error('event log failed:', e.message); }
-  const line = `data: ${JSON.stringify({ ...event, _id: String(event._id || '') })}\n\n`;
-  for (const res of liveClients) res.write(line);
+  if (!store.supportsChangeStreams()) for (const res of liveClients) res.write(sseLine(event));
 }
-setInterval(() => { for (const res of liveClients) res.write(': ping\n\n'); }, 25000).unref();
+// Vercel functions have a time limit, so live connections there end after ~55 s and the browser reconnects
+const LIVE_STREAM_MS = (Number(process.env.LIVE_STREAM_SECONDS) || (process.env.VERCEL ? 55 : 0)) * 1000;
+
+function openLiveStream(req, res) {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.write('retry: 3000\n\n');
+  const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+  let stream = null;
+  if (store.supportsChangeStreams()) {
+    stream = col('events').watch([{ $match: { operationType: 'insert' } }]);
+    stream.on('change', (ch) => res.write(sseLine(ch.fullDocument)));
+    stream.on('error', (e) => { console.error('live stream error:', e.message); res.end(); });
+  } else {
+    liveClients.add(res);
+  }
+  const limit = LIVE_STREAM_MS ? setTimeout(() => res.end(), LIVE_STREAM_MS) : null;
+  const cleanup = () => {
+    clearInterval(ping);
+    if (limit) clearTimeout(limit);
+    liveClients.delete(res);
+    if (stream) stream.close().catch(() => {});
+  };
+  req.on('close', cleanup);
+  res.on('finish', cleanup);
+}
 
 // ---------- Customer accounts ----------
 // Passwords are stored only as scrypt hashes. Logins use a signed, HttpOnly cookie.
@@ -143,6 +170,10 @@ const ADMIN_HOURS = 12;
 
 function sessionSecret() {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (process.env.VERCEL) {
+    // Vercel's disk is read-only and shared by many copies, so the secret must be a setting
+    throw new Error('SESSION_SECRET is not set. Add it in Vercel → Project → Settings → Environment Variables (a long random string).');
+  }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(SECRET_FILE)) fs.writeFileSync(SECRET_FILE, crypto.randomBytes(32).toString('hex'));
   return fs.readFileSync(SECRET_FILE, 'utf8').trim();
@@ -514,11 +545,7 @@ async function handle(req, res) {
     // Real-time stream (Server-Sent Events)
     if (pathname === '/api/admin/stream' && req.method === 'GET') {
       if (liveClients.size >= 25) return sendJSON(res, 429, { error: 'Too many dashboards open.' });
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-      res.write('retry: 3000\n\n');
-      liveClients.add(res);
-      req.on('close', () => liveClients.delete(res));
-      return;
+      return openLiveStream(req, res);
     }
 
     if (pathname === '/api/admin/summary' && req.method === 'GET') {
@@ -663,26 +690,48 @@ async function handle(req, res) {
   serveStatic(req, res);
 }
 
-const server = http.createServer((req, res) => {
-  handle(req, res).catch((err) => {
+// ---------- Connect to MongoDB once (reused by every request, and by warm Vercel functions) ----------
+let readyPromise = null;
+function ready() {
+  if (!readyPromise) {
+    readyPromise = (async () => {
+      const db = await store.connect(MONGODB_URI);
+      console.log(`MongoDB: connected (database "${db.databaseName}", live updates via ${store.supportsChangeStreams() ? 'change streams' : 'this server'})`);
+      const imported = await store.importJsonFiles(DATA_DIR);
+      if (imported.length) console.log(`MongoDB: imported ${imported.join(' and ')} from the old data/ JSON files`);
+      return db;
+    })();
+    readyPromise.catch(() => { readyPromise = null; }); // try again on the next request
+  }
+  return readyPromise;
+}
+
+/** Handles one request. Used by `node server.js` below, and by Vercel through api/index.js. */
+async function requestHandler(req, res) {
+  try {
+    await ready();
+  } catch (e) {
+    console.error(`MongoDB connection failed: ${e.message}`);
+    return sendJSON(res, 503, { error: 'The booking system is temporarily unavailable. Please try again in a minute.' });
+  }
+  return handle(req, res).catch((err) => {
     console.error(err.message);
     if (!res.headersSent) sendJSON(res, 400, { error: err.message || 'Something went wrong.' });
     else res.end();
   });
-});
+}
+module.exports = requestHandler;
 
-// ---------- Start: connect to MongoDB first, then accept requests ----------
-(async () => {
+// ---------- Start (only when run directly: node server.js) ----------
+if (require.main === module) (async () => {
   try {
-    const db = await store.connect(MONGODB_URI);
-    console.log(`MongoDB: connected (database "${db.databaseName}")`);
-    const imported = await store.importJsonFiles(DATA_DIR);
-    if (imported.length) console.log(`MongoDB: imported ${imported.join(' and ')} from the old data/ JSON files`);
+    await ready();
   } catch (e) {
     console.error(`\n✖ Could not connect to MongoDB at ${MONGODB_URI.replace(/\/\/[^@/]*@/, '//***@')}\n  ${e.message}`);
     console.error('  Start MongoDB (Windows: the "MongoDB" service) or set MONGODB_URI in .env, then run node server.js again.\n');
     process.exit(1);
   }
+  const server = http.createServer(requestHandler);
   server.listen(PORT, () => {
     console.log(`APKASPA running at http://localhost:${PORT}`);
     console.log(ADMIN_ENABLED

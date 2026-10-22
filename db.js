@@ -17,6 +17,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 
 let client;
 let db;
+let changeStreams = false; // true on Atlas / replica sets: any server copy can watch for new events
 
 const col = (name) => db.collection(name);
 
@@ -41,6 +42,9 @@ async function connect(uri) {
   await client.connect();
   db = client.db(); // database name from the URI path
   if (db.databaseName === 'test') db = client.db('apkaspa'); // URI without a database name
+
+  const hello = await db.admin().command({ hello: 1 }).catch(() => ({}));
+  changeStreams = Boolean(hello.setName || hello.msg === 'isdbgrid');
 
   await Promise.all([
     col('users').createIndex({ email: 1 }, { unique: true }),
@@ -82,4 +86,8 @@ async function importJsonFiles(dataDir) {
 
 const toId = (id) => { try { return new ObjectId(String(id)); } catch (e) { return null; } };
 
-module.exports = { connect, importJsonFiles, col, toId, ObjectId, close: () => client && client.close() };
+module.exports = {
+  connect, importJsonFiles, col, toId, ObjectId,
+  supportsChangeStreams: () => changeStreams,
+  close: () => client && client.close(),
+};

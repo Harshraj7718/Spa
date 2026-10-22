@@ -128,7 +128,33 @@ Everything is stored in the `apkaspa` database:
 
 If your network's DNS can't look up `mongodb+srv://` addresses (`querySrv ECONNREFUSED`), the server retries with public DNS (8.8.8.8 / 1.1.1.1) automatically; change them with `DNS_SERVERS` in `.env`.
 
-## Hosting it online
+## Deploying to Vercel
+
+The project is ready for Vercel: the website and admin are served as static files from `dist/`, and every `/api/…`
+request runs `api/index.js` (the same code as `server.js`) as a serverless function. Settings are in `vercel.json`;
+`.vercelignore` keeps `.env`, `data/` and `_old_static/` from ever being uploaded.
+
+1. **Atlas → Security → Network Access → Add IP Address → Allow access from anywhere (`0.0.0.0/0`).**
+   Vercel has no fixed IP addresses. Your database is then protected only by its password, so use a long, unique one.
+2. **Make a session secret** (keeps customers logged in):
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+3. **Deploy** with the Vercel CLI from this folder:
+   ```
+   npx vercel login
+   npx vercel            # first time: creates the project (accept the detected settings)
+   ```
+   or push the folder to GitHub and use **Vercel → Add New → Project → Import**.
+4. **Vercel → Project → Settings → Environment Variables** (Production): `MONGODB_URI`, `ADMIN_USERNAME`,
+   `ADMIN_PASSWORD`, `SESSION_SECRET`, and optionally `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`.
+5. Deploy to production: `npx vercel --prod` (or push to GitHub again).
+
+How it behaves on Vercel:
+- **Live admin updates** use MongoDB change streams (Atlas supports them). Each live connection lasts ~55 s, then the
+  browser reconnects and reloads, so nothing is missed.
+- **Login rate limits** (5 wrong passwords) are counted per server copy, so they're a little looser on Vercel.
+- Vercel's free **Hobby** plan is for non-commercial use; a business site needs the **Pro** plan.
+
+## Hosting it online (any Node.js host)
 Use a host that runs Node.js (Render, Railway, a VPS) with HTTPS:
 1. `npm install` → `npm run build` → `node server.js` (or `npm start`).
 2. Set the values from `.env` as environment variables there, including a `SESSION_SECRET`.
