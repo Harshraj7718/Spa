@@ -13,7 +13,8 @@ const WA = 'https://wa.me/919244092230?text=';
 function useNext() {
   const [params] = useSearchParams();
   const next = params.get('next') || '';
-  return /^\/(?!\/)[^:]*$/.test(next) ? next : '/';
+  // Only plain same-site paths. Block "//x", "/\x" (browsers read both as another website) and "x:" schemes.
+  return /^\/(?![/\\])[^:\\]*$/.test(next) ? next : '/';
 }
 
 function AuthLayout({ title, side, children }: { title: string; side: string; children: ReactNode }) {

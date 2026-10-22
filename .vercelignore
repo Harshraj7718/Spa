@@ -1,9 +1,9 @@
-# Never upload these to Vercel
+# Never upload these to Vercel.
+# (Don't list dist/ here – Vercel builds into dist/ and would then throw the website away.
+#  dist/ is already kept out of GitHub by .gitignore.)
 .env
 .env.*
 !.env.example
 data/
 _old_static/
-node_modules/
-dist/
 .claude/
