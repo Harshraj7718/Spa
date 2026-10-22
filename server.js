@@ -1,6 +1,6 @@
 // ============================================================
 // APKASPA website server
-// - Serves the website files and the admin dashboard (/admin)
+// - Serves the React website and admin dashboard built into dist/ (npm run build)
 // - Stores everything in MongoDB (see db.js): accounts, bookings, newsletter, activity
 // - Creates Razorpay orders (amount is calculated here, never trusted from the browser)
 // - Verifies Razorpay payment signatures
@@ -13,12 +13,12 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const vm = require('vm');
 const store = require('./db');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
-const ADMIN_DIR = path.join(ROOT, 'Admin');
+const DIST = path.join(ROOT, 'dist'); // built React apps (npm run build)
+const CATALOG_FILE = path.join(ROOT, 'shared', 'catalog.json'); // therapists, offers, prices – shared with the website
 
 // ---------- .env loader (no packages needed) ----------
 const envPath = path.join(ROOT, '.env');
@@ -41,14 +41,28 @@ const ADMIN_ENABLED = ADMIN_PASSWORD.length >= 10;
 
 const { col, toId } = store;
 
-// ---------- Prices: read the same js/therapists.js the website uses ----------
+// ---------- Prices: read the same shared/catalog.json the website uses ----------
 function loadCatalog() {
-  const code = fs.readFileSync(path.join(ROOT, 'js', 'therapists.js'), 'utf8');
-  return vm.runInNewContext(code + '\n;({ THERAPISTS, VISIT_CHARGE, OFFERS, discountFor, getTherapist })', {});
+  const c = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8')); // re-read each time so price edits apply without a restart
+  return {
+    VISIT_CHARGE: c.visitCharge,
+    getTherapist(type, id) {
+      const base = (c.therapists[type] || [])[id];
+      return base ? { ...c.therapistDefaults, ...base } : null;
+    },
+    // Same rule as discountFor() in shared/catalog.ts
+    discountFor(code, price) {
+      const offer = c.offers.find((o) => o.code === String(code || '').trim().toUpperCase());
+      if (!offer) return 0;
+      let off = offer.kind === 'percent' ? Math.round((price * offer.value) / 100) : offer.value;
+      if (offer.max) off = Math.min(off, offer.max);
+      return Math.min(off, price);
+    },
+  };
 }
 
 function quote({ type, id, pay, code }) {
-  const cat = loadCatalog(); // re-read each time so price edits apply without a restart
+  const cat = loadCatalog();
   const t = cat.getTherapist(String(type), Number(id));
   if (!t) throw new Error('Unknown therapist');
   if (pay !== 'online' && pay !== 'cod') throw new Error('Unknown payment method');
@@ -212,9 +226,11 @@ const MIME = {
   '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.woff2': 'font/woff2', '.md': 'text/plain; charset=utf-8',
 };
-// Files the website may serve; everything else (server.js, db.js, .env, data/, node_modules/) stays private
-const PUBLIC = /^\/(index\.html|book-now\.html|therapist\.html|offers\.html|login\.html|signup\.html|bookings\.html|css\/.+|js\/.+|assets\/.+)$/;
-const ADMIN_FILES = { '/admin': 'index.html', '/admin/': 'index.html', '/admin/admin.css': 'admin.css', '/admin/admin.js': 'admin.js' };
+// Old .html addresses from the first version of the site → the React pages
+const LEGACY = {
+  '/index.html': '/', '/book-now.html': '/book-now', '/offers.html': '/offers',
+  '/bookings.html': '/bookings', '/login.html': '/login', '/signup.html': '/signup',
+};
 
 function serveFile(req, res, file, extraHeaders = {}) {
   fs.stat(file, (err, st) => {
@@ -232,19 +248,47 @@ function serveFile(req, res, file, extraHeaders = {}) {
     fs.createReadStream(file).pipe(res);
   });
 }
+// Only files inside dist/ (the built React apps + your photos) are ever served.
+// server.js, db.js, .env, data/, shared/, src/ and node_modules/ stay private.
 function serveStatic(req, res) {
-  let urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  if (ADMIN_FILES[urlPath]) {
-    // Admin pages: never cached, never framed by other sites
-    return serveFile(req, res, path.join(ADMIN_DIR, ADMIN_FILES[urlPath]),
-      { 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Robots-Tag': 'noindex' });
+  const url = new URL(req.url, 'http://x');
+  let urlPath;
+  try { urlPath = decodeURIComponent(url.pathname); } catch (e) { res.writeHead(400); return res.end('Bad request'); }
+
+  // Old addresses keep working (permanent redirect)
+  if (LEGACY[urlPath] || urlPath === '/therapist.html') {
+    let to = LEGACY[urlPath];
+    if (urlPath === '/therapist.html') to = `/therapist/${encodeURIComponent(url.searchParams.get('type') || 'basic')}/${Number(url.searchParams.get('id')) || 0}`;
+    const next = url.searchParams.get('next');
+    if (next && /^[a-z-]+\.html$/i.test(next)) to += '?next=' + encodeURIComponent(LEGACY['/' + next] || '/');
+    res.writeHead(301, { Location: to });
+    return res.end();
   }
-  if (urlPath === '/') urlPath = '/index.html';
-  const file = path.normalize(path.join(ROOT, urlPath));
-  if (!file.startsWith(ROOT + path.sep) || !PUBLIC.test(urlPath) || urlPath.includes('..')) {
-    res.writeHead(404); return res.end('Not found');
+
+  if (!fs.existsSync(path.join(DIST, 'index.html'))) {
+    res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('The website has not been built yet. Run "npm run build", then start the server again.');
   }
-  serveFile(req, res, file);
+
+  const isAdmin = urlPath === '/admin' || urlPath.startsWith('/admin/');
+  const file = path.normalize(path.join(DIST, urlPath));
+  if (file !== DIST && !file.startsWith(DIST + path.sep)) { res.writeHead(404); return res.end('Not found'); }
+
+  fs.stat(file, (err, st) => {
+    if (!err && st.isFile()) {
+      const cache = urlPath.startsWith('/_app/') ? 'public, max-age=31536000, immutable' // file names change on every build
+        : file.endsWith('.html') ? 'no-cache' : 'public, max-age=3600';
+      return serveFile(req, res, file, { 'Cache-Control': cache });
+    }
+    // A missing photo/video/file stays a 404 (the site then shows its placeholder)
+    if (path.extname(urlPath)) { res.writeHead(404); return res.end('Not found'); }
+    // Any page address → the React app, which picks the right page
+    if (isAdmin) {
+      return serveFile(req, res, path.join(DIST, 'admin', 'index.html'),
+        { 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Robots-Tag': 'noindex' });
+    }
+    serveFile(req, res, path.join(DIST, 'index.html'), { 'Cache-Control': 'no-cache', 'X-Frame-Options': 'SAMEORIGIN' });
+  });
 }
 
 // ---------- Shaping data for the browser ----------

@@ -113,3 +113,18 @@
   .brand { font-size: 18px; letter-spacing: 1px; }
   .topbar-actions .icon-btn { width: 36px; height: 36px; }
 }
+@media (max-width: 640px) {
+  .topbar-inner { height: 60px; }
+  .avatar { width: 36px; height: 36px; }
+  .brand { font-size: 19px; }
+  .brand-lotus { width: 22px; height: 12px; }
+  .topbar-actions .icon-btn { width: 36px; height: 36px; }
+  .topbar-actions .icon-btn svg { width: 22px; height: 22px; }
+  .city-pill { top: calc(100% - 14px); right: 12px; padding: 5px 11px; font-size: 12.5px; gap: 5px; }
+  .city-pill svg { width: 12px; height: 12px; }
+  .city { top: 92px; }
+}
+@media (max-width: 640px) {
+  .city-pill { top: calc(100% - 10px); }   /* sits just below the bell/menu icons */
+  .city { top: 96px; }
+}

@@ -271,3 +271,154 @@ h2.light span { color: var(--green-light); }
   .reveal { opacity: 1; transform: none; transition: none; }
   .tap-hint b { animation: none; }
 }
+
+/* =====================================================================
+   PHONE LAYOUT (≤ 640px) – matches the APKASPA mobile app design
+   Tablet and desktop are unchanged.
+   ===================================================================== */
+@media (min-width: 641px) { .m-only { display: none !important; } }
+@media (max-width: 640px) {
+  .d-only { display: none !important; }
+  .tap-hint { display: none; }
+
+  /* ---- Hero card: short, title + hours + one button ---- */
+  .hero-wrap { padding-top: 26px; }
+  .hero { min-height: 0; border-radius: 24px; }
+  .hero-shade { background: linear-gradient(90deg, rgba(20,28,12,.9) 0%, rgba(20,28,12,.7) 55%, rgba(20,28,12,.35) 100%); }
+  .hero-content { padding: 26px 22px 30px; max-width: none; }
+  .hero .eyebrow { font-size: 11px; letter-spacing: 3.5px; }
+  .hero .eyebrow .line { display: none; }
+  .hero h1 { font-size: clamp(28px, 8vw, 34px); line-height: 1.12; margin: 12px 0 14px; }
+  .hero-sub, .hero-strip, .hero-cta .btn-ghost { display: none; }
+  .hero-hours { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,.85); font-size: 15px; margin-bottom: 20px; }
+  .hero-hours svg { width: 18px; height: 18px; opacity: .9; }
+  .hero-cta .btn-primary { padding: 9px 9px 9px 24px; font-size: 17px; font-weight: 600; gap: 14px; }
+  .hero-cta .btn-arrow { width: 34px; height: 34px; background: #fff; color: var(--ink); font-weight: 700; }
+  .hero.missing-video .ph-label { bottom: 12px; right: 12px; font-size: 10px; }
+
+  /* ---- Quick actions card (replaces the photo cards on phones) ---- */
+  #services { padding-top: 16px; }
+  #services .section-head, #services .grid-3 { display: none; }
+  .quick-actions {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    background: #fbfaf6; border: 1px solid #ece8dc; border-radius: 26px; padding: 22px 6px;
+  }
+  .quick-actions a { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 0 6px; position: relative; }
+  .quick-actions a + a::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 1px; background: #e4e0d4; }
+  .qa-icon { width: 60px; height: 60px; border-radius: 50%; background: var(--dark); color: #fff; display: grid; place-items: center; margin-bottom: 10px; }
+  .qa-icon svg { width: 26px; height: 26px; stroke-width: 1.7; }
+  .quick-actions b { font-size: clamp(13px, 3.9vw, 16px); color: var(--ink); font-weight: 600; line-height: 1.25; }
+  .quick-actions small { font-size: clamp(11.5px, 3.4vw, 14px); color: var(--muted); line-height: 1.3; }
+
+  /* ---- Popular Massages card ---- */
+  #massages { padding-top: 16px; }
+  #massages .m-card { background: #fff; border-radius: 22px; padding: 18px 0 18px 16px; box-shadow: var(--shadow); }
+  #massages .section-head { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding-right: 16px; }
+  #massages .eyebrow { display: none; }
+  #massages h2 { margin: 0; font-size: clamp(20px, 6vw, 24px); }
+  .m-title { color: var(--ink); }
+  #massages .round-btn { display: none; }
+  .view-all { background: none; box-shadow: none; padding: 0; color: var(--green); font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .carousel { grid-auto-columns: min(72%, 270px); gap: 12px; padding: 0 16px 4px 0; }
+  .massage-card { position: relative; box-shadow: none; border: 1px solid #ebe7dc; border-radius: 18px; }
+  .massage-media { height: 110px; margin: 0; border-radius: 0; }
+  .massage-media .time { display: none; }
+  .massage-media .badge { font-size: 9.5px; top: 8px; right: 8px; }
+  .massage-body { padding: 12px 16px 14px; }
+  .massage-body h3 { font-size: 19px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .massage-body p:not(.m-dur) { font-size: 14px; margin-bottom: 10px; flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .m-dur { display: flex; align-items: center; gap: 6px; border-top: 1px solid #ebe7dc; padding-top: 10px; font-size: 14px; color: var(--text); }
+  .m-dur svg { width: 16px; height: 16px; }
+  /* the whole card opens booking; the button becomes an invisible tap layer */
+  .massage-body .btn { position: absolute; inset: 0; opacity: 0; margin: 0; border-radius: inherit; z-index: 2; }
+  .massage-body .btn:focus-visible { opacity: 1; background: transparent; outline: 3px solid var(--green); color: transparent; }
+
+  /* ---- Contact: one row of round icons ---- */
+  #contact { padding-top: 16px; }
+  .contact-box { padding: 18px 8px; border-radius: 22px; gap: 0; }
+  .contact-box::before { display: none; }
+  .contact-text { display: none; }
+  .contact-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  .contact-tile { flex-direction: column; justify-content: center; background: none; border: 0; border-radius: 0; padding: 4px 0; position: relative; }
+  .contact-tile:hover { transform: none; background: none; }
+  .contact-tile + .contact-tile::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 1px; background: rgba(255,255,255,.14); }
+  .contact-tile .ci { width: 56px; height: 56px; }
+  .contact-tile .ci svg { width: 26px; height: 26px; }
+  .contact-tile > span:nth-child(2), .contact-tile i { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* label kept for screen readers */
+
+  /* ---- Bottom bar: full width, attached to the bottom edge ---- */
+  .bottom-nav {
+    left: 0; right: 0; bottom: 0; transform: none; width: 100%;
+    border-radius: 28px 28px 0 0; padding: 12px 6px calc(12px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 30px rgba(31, 42, 20, .10); align-items: flex-end;
+  }
+  .bottom-nav a { font-size: 13px; gap: 6px; color: #9a9d92; flex: 1; }
+  .bottom-nav a.active { color: var(--ink); font-weight: 600; }
+  .bottom-nav svg { width: 24px; height: 24px; stroke-width: 1.7; }
+  .nav-book { margin-top: -42px; color: var(--dark) !important; font-weight: 600; }
+  .nav-book span { width: 66px; height: 66px; border-width: 6px; background: var(--green); color: #fff; box-shadow: 0 8px 22px rgba(110,130,64,.4); }
+  .nav-book svg { width: 28px; height: 28px; }
+  body { padding-bottom: 120px; }
+}
+
+/* ---- Phone sizes measured from the APKASPA app screenshot (iPhone, 390pt wide) ---- */
+@media (max-width: 640px) {
+  .hero-wrap { padding-top: 22px; }
+  .hero { border-radius: 16px; }
+  .hero-content { padding: 18px 22px 20px; }
+  .hero .eyebrow { font-size: 9.5px; letter-spacing: 3px; }
+  .hero h1 { font-size: 22px; line-height: 1.1; margin: 8px 0 10px; }
+  .hero-hours { font-size: 11.5px; gap: 6px; margin-bottom: 12px; }
+  .hero-hours svg { width: 14px; height: 14px; }
+  .hero-cta .btn-primary { padding: 5px 5px 5px 16px; font-size: 13px; gap: 12px; }
+  .hero-cta .btn-arrow { width: 24px; height: 24px; font-size: 13px; }
+
+  #services, #massages, #contact { padding-top: 12px; }
+  .quick-actions { border-radius: 18px; padding: 18px 2px 16px; }
+  .quick-actions a { gap: 2px; padding: 0 4px; }
+  .qa-icon { width: 42px; height: 42px; margin-bottom: 8px; }
+  .qa-icon svg { width: 20px; height: 20px; }
+  .quick-actions b { font-size: 13px; white-space: nowrap; }
+  .quick-actions small { font-size: 11px; white-space: nowrap; }
+
+  #massages .m-card { border-radius: 14px; padding: 14px 0 14px 12px; }
+  #massages .section-head { margin-bottom: 12px; padding-right: 14px; }
+  #massages h2 { font-size: 20px; }
+  .view-all { font-size: 13px; }
+  .carousel { grid-auto-columns: 140px; gap: 9px; padding-right: 12px; }
+  .massage-card { border-radius: 12px; }
+  .massage-media { height: 58px; }
+  .massage-media .badge { font-size: 8px; padding: 2px 6px; }
+  .massage-body { padding: 8px 10px 9px; }
+  .massage-body h3 { font-size: 14.5px; margin-bottom: 2px; }
+  .massage-body p:not(.m-dur) { font-size: 11px; line-height: 1.4; margin-bottom: 7px; }
+  .m-dur { font-size: 11px; padding-top: 6px; gap: 5px; }
+  .m-dur svg { width: 12px; height: 12px; }
+
+  .contact-box { padding: 12px 6px; border-radius: 16px; }
+  .contact-tile .ci { width: 36px; height: 36px; }
+  .contact-tile .ci svg { width: 18px; height: 18px; }
+  .contact-tile + .contact-tile::before { top: 10px; bottom: 10px; }
+
+  .bottom-nav { border-radius: 22px 22px 0 0; padding: 8px 4px calc(8px + env(safe-area-inset-bottom)); }
+  .bottom-nav a { font-size: 10.5px; gap: 4px; }
+  .bottom-nav svg { width: 19px; height: 19px; }
+  .nav-book { margin-top: -30px; }
+  .nav-book span { width: 56px; height: 56px; border-width: 5px; }
+  .nav-book svg { width: 24px; height: 24px; }
+  body { padding-bottom: 96px; }
+}
+@media (max-width: 640px) {
+  .massage-body p.m-dur { margin: 0; flex: none; line-height: 1.4; }
+  .massage-body p:not(.m-dur) { flex: none; }
+  .massage-body { justify-content: space-between; }
+}
+/* Phones narrower than ~390pt: let quick-action labels wrap onto two balanced lines */
+@media (max-width: 389px) {
+  .quick-actions b, .quick-actions small { white-space: normal; text-wrap: balance; overflow-wrap: break-word; }
+  .quick-actions b { font-size: 12.5px; }
+  .quick-actions small { font-size: 10.5px; }
+}
+@media (max-width: 640px) {
+  #massages h2 { font-size: clamp(16px, 5.1vw, 20px); white-space: nowrap; }
+}
