@@ -98,7 +98,24 @@ Other settings: time-slot hours at the top of `src/website/pages/Checkout.tsx`, 
 - **Pay Online** charges the full treatment amount (minus any offer); **Cash on Delivery** charges only the visiting charge online.
 - After payment the server checks Razorpay's signature, then marks the booking paid in MongoDB.
 - If keys are missing or Razorpay is unreachable, the customer is offered **Confirm on WhatsApp** instead — they're never stuck.
+### Razorpay webhook (recommended)
+Records payments even if a customer closes the page before returning to your site.
+1. Razorpay Dashboard → **Settings → Webhooks → Add New Webhook**.
+2. URL:  · Secret: any long password you choose · Events: **payment.captured**, **payment.failed**.
+3. Put the same secret in  (in  and on Vercel).
+4. On Vercel also add  so the webhook can check Razorpay's signature.
+
 - Test with Razorpay's test details (e.g. UPI `success@razorpay`). To go live: finish KYC, use `rzp_live_…` keys, host with HTTPS.
+- After paying, the customer sees **Booking confirmed** with a **View my bookings** button; the booking shows as **Paid** in the admin instantly.
+
+### Razorpay webhook (recommended)
+Records a payment even if the customer closes the page before returning to your site.
+1. Razorpay Dashboard → **Settings → Webhooks → Add New Webhook**.
+2. URL: `https://YOUR-SITE/api/razorpay-webhook` · Secret: any long password you choose · Events: **payment.captured** and **payment.failed**.
+3. Put the same secret in `RAZORPAY_WEBHOOK_SECRET` (in `.env` and on Vercel).
+4. On Vercel also add `NODEJS_HELPERS=0`, so the webhook can check Razorpay's signature.
+
+Failed payments appear in the admin's Activity feed (⚠️). Checkout and webhook can both report the same payment safely – it's recorded once.
 
 ## Accounts
 

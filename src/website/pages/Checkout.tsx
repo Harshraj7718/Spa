@@ -439,12 +439,17 @@ export default function Checkout() {
               {sheet.mode === 'paid' && <div className="success-box"><b>Booking ID: {sheet.bookingId}</b><small>Payment ID: {sheet.paymentId}</small></div>}
               {rows().map(([k, v]) => <div key={k} className="sum-row"><span>{k}</span><span>{v}</span></div>)}
             </div>
-            <a className="btn btn-primary block" target="_blank" rel="noopener" onClick={onWhatsApp}
-              href={waLink(sheet.mode === 'paid' ? `Paid booking ${sheet.bookingId} (payment ${sheet.paymentId})` : 'New booking request')}>
-              {sheet.mode === 'paid' ? 'Share on WhatsApp' : 'Confirm on WhatsApp'} <span>→</span>
-            </a>
+            {sheet.mode === 'paid' ? (
+              // Paid online: the booking is already saved and shown in the admin – no WhatsApp step needed
+              <Link className="btn btn-primary block" to="/bookings">View my bookings <span>→</span></Link>
+            ) : (
+              <a className="btn btn-primary block" target="_blank" rel="noopener" onClick={onWhatsApp} href={waLink('New booking request')}>
+                Confirm on WhatsApp <span>→</span>
+              </a>
+            )}
             <p className="hint center">
-              {sheet.mode === 'paid' && <>Payment received. Our therapist will reach you at the chosen time. <Link to="/bookings">View my bookings</Link></>}
+              {sheet.mode === 'paid' && <>Payment received – your booking is confirmed. Our therapist will reach you at the chosen time.{' '}
+                <a href={waLink(`Paid booking ${sheet.bookingId} (payment ${sheet.paymentId})`)} target="_blank" rel="noopener">Need help? WhatsApp us</a></>}
               {sheet.mode === 'fallback' && "Online payment isn't available right now. Send your booking on WhatsApp and we'll confirm it and share a payment link."}
               {sheet.mode === 'request' && 'Our team will reply with the payment link and confirm your therapist.'}
             </p>

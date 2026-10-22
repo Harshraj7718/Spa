@@ -34,6 +34,7 @@ const PORT = Number(process.env.PORT) || 5500;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/apkaspa';
 const KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || ''; // Razorpay → Settings → Webhooks
 const RAZORPAY_ENABLED = Boolean(KEY_ID && KEY_SECRET);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -87,6 +88,39 @@ async function razorpay(method, endpoint, body) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error?.description || `Razorpay error ${res.status}`);
   return json;
+}
+
+/**
+ * Records a successful payment. Safe to call twice for the same payment (the checkout page and the
+ * Razorpay webhook both report it): only the first call updates the booking and notifies the admin.
+ */
+async function markPaid(orderId, paymentId, via) {
+  const booking = await col('bookings').findOneAndUpdate(
+    { 'payment.orderId': orderId, status: 'pending_payment' },
+    { $set: { status: 'paid', paidAt: new Date(), 'payment.paymentId': paymentId, 'payment.confirmedVia': via } },
+    { returnDocument: 'after' });
+  if (booking) {
+    await logEvent('payment_success', `Payment received: ₹${booking.payment?.paidOnline ?? '?'} from ${booking.customer?.name || 'customer'} (${booking.bookingId})`, { bookingId: booking.bookingId });
+    console.log(`✔ Paid booking ${booking.bookingId} – ${booking.customer?.name || ''} – ₹${booking.payment?.paidOnline ?? '?'} (via ${via})`);
+    return booking;
+  }
+  const existing = await col('bookings').findOne({ 'payment.orderId': orderId });
+  if (existing) return existing; // already recorded
+  // Order isn't in the database (e.g. made before this version): rebuild it from Razorpay
+  const order = await razorpay('GET', `/orders/${encodeURIComponent(orderId)}`).catch(() => ({}));
+  const recovered = {
+    bookingId: order.receipt || newBookingId('APK'), source: 'online', status: 'paid', createdAt: new Date(), paidAt: new Date(),
+    therapist: { name: order.notes?.therapist },
+    payment: { method: order.notes?.payment, paidOnline: order.amount ? order.amount / 100 : 0, orderId, paymentId, confirmedVia: via },
+    customer: { name: order.notes?.customer, mobile: order.notes?.mobile, slot: order.notes?.slot },
+    note: 'Recovered from Razorpay order – check the Razorpay dashboard for full details',
+  };
+  try { await col('bookings').insertOne(recovered); } catch (e) {
+    if (e.code === 11000) return (await col('bookings').findOne({ bookingId: recovered.bookingId })) || recovered; // the other report won
+    throw e;
+  }
+  await logEvent('payment_success', `Payment received: ₹${recovered.payment.paidOnline} from ${recovered.customer.name || 'customer'} (${recovered.bookingId})`, { bookingId: recovered.bookingId });
+  return recovered;
 }
 
 function signatureValid(orderId, paymentId, signature) {
@@ -242,13 +276,33 @@ function sendJSON(res, status, data, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(data));
 }
-function readBody(req) {
+// On Vercel, the platform may read the request body before our code runs and put it in req.body.
+// Then the stream is already finished, so we must use req.body instead of waiting for data.
+function preReadBody(req) {
+  if (!Object.getOwnPropertyDescriptor(req, 'body') && !req.readableEnded) return undefined;
+  try { return req.body; } catch (e) { return undefined; } // Vercel's getter throws on invalid JSON
+}
+/** The exact bytes that were sent (needed to check Razorpay webhook signatures). null = not available. */
+function readRawBody(req, limit = 20000) {
   return new Promise((resolve, reject) => {
+    const pre = preReadBody(req);
+    if (pre !== undefined || req.readableEnded) {
+      if (Buffer.isBuffer(pre)) return resolve(pre);
+      if (typeof pre === 'string') return resolve(Buffer.from(pre));
+      return resolve(pre == null ? Buffer.alloc(0) : null); // already parsed – original bytes are gone
+    }
     let size = 0; const chunks = [];
-    req.on('data', (c) => { size += c.length; if (size > 20000) { reject(new Error('Body too large')); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); } catch (e) { reject(new Error('Invalid JSON')); } });
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new Error('Body too large')); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+async function readBody(req) {
+  const pre = preReadBody(req);
+  if (pre && typeof pre === 'object' && !Buffer.isBuffer(pre)) return pre; // already parsed JSON (Vercel)
+  const raw = await readRawBody(req);
+  if (!raw || !raw.length) return {};
+  try { return JSON.parse(raw.toString()); } catch (e) { throw new Error('Invalid JSON'); }
 }
 
 const MIME = {
@@ -500,24 +554,34 @@ async function handle(req, res) {
     if (!RAZORPAY_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sig } = await readBody(req);
     if (!signatureValid(orderId, paymentId, sig)) return sendJSON(res, 400, { error: 'Payment could not be verified.' });
-    const paid = { status: 'paid', paidAt: new Date(), 'payment.paymentId': String(paymentId) };
-    let booking = await col('bookings').findOneAndUpdate(
-      { 'payment.orderId': String(orderId) }, { $set: paid }, { returnDocument: 'after' });
-    if (!booking) {
-      // Order isn't in the database (e.g. made before this version): rebuild it from Razorpay
-      const order = await razorpay('GET', `/orders/${encodeURIComponent(orderId)}`).catch(() => ({}));
-      booking = {
-        bookingId: order.receipt || newBookingId('APK'), source: 'online', status: 'paid', createdAt: new Date(), paidAt: new Date(),
-        therapist: { name: order.notes?.therapist },
-        payment: { method: order.notes?.payment, paidOnline: order.amount ? order.amount / 100 : 0, orderId: String(orderId), paymentId: String(paymentId) },
-        customer: { name: order.notes?.customer, mobile: order.notes?.mobile, slot: order.notes?.slot },
-        note: 'Recovered from Razorpay order – check the Razorpay dashboard for full details',
-      };
-      await col('bookings').insertOne(booking);
-    }
-    await logEvent('payment_success', `Payment received: ₹${booking.payment?.paidOnline ?? '?'} from ${booking.customer?.name || 'customer'} (${booking.bookingId})`, { bookingId: booking.bookingId });
-    console.log(`✔ Paid booking ${booking.bookingId} – ${booking.customer?.name || ''} – ₹${booking.payment?.paidOnline ?? '?'}`);
+    const booking = await markPaid(String(orderId), String(paymentId), 'checkout');
     return sendJSON(res, 200, { ok: true, bookingId: booking.bookingId });
+  }
+
+  // Razorpay webhook – Razorpay's servers tell us about payments directly, so a payment is recorded
+  // even if the customer closes the page before returning. Set it up in Razorpay → Settings → Webhooks.
+  if (pathname === '/api/razorpay-webhook' && req.method === 'POST') {
+    if (!WEBHOOK_SECRET) return sendJSON(res, 503, { error: 'RAZORPAY_WEBHOOK_SECRET is not set.' });
+    const raw = await readRawBody(req, 1e6);
+    if (!raw) return sendJSON(res, 500, { error: 'Webhook body unavailable. On Vercel, add the environment variable NODEJS_HELPERS=0 and redeploy.' });
+    const expected = crypto.createHmac('sha256', WEBHOOK_SECRET).update(raw).digest('hex');
+    const given = String(req.headers['x-razorpay-signature'] || '');
+    if (expected.length !== given.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(given))) {
+      return sendJSON(res, 400, { error: 'Invalid webhook signature.' });
+    }
+    let evt;
+    try { evt = JSON.parse(raw.toString()); } catch (e) { return sendJSON(res, 400, { error: 'Invalid JSON' }); }
+    const payment = evt.payload?.payment?.entity || {};
+    const orderId = String(payment.order_id || evt.payload?.order?.entity?.id || '');
+    if ((evt.event === 'payment.captured' || evt.event === 'order.paid') && orderId && payment.id) {
+      await markPaid(orderId, String(payment.id), 'webhook');
+    } else if (evt.event === 'payment.failed' && orderId) {
+      const b = await col('bookings').findOne({ 'payment.orderId': orderId });
+      if (b && b.status === 'pending_payment') {
+        await logEvent('payment_failed', `Payment failed for ${b.customer?.name || 'a customer'} (${b.bookingId}): ${payment.error_description || 'declined'}`, { bookingId: b.bookingId });
+      }
+    }
+    return sendJSON(res, 200, { ok: true }); // always 200 for valid events so Razorpay doesn't retry
   }
 
   // ===== Admin =====
