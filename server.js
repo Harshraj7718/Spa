@@ -708,11 +708,27 @@ function ready() {
 
 /** Handles one request. Used by `node server.js` below, and by Vercel through api/index.js. */
 async function requestHandler(req, res) {
+  // Setup check: which settings this server can see (yes/no only) and whether the database connects
+  if (req.url.split('?')[0] === '/api/health') {
+    let database = 'connected';
+    try { await ready(); } catch (e) { database = 'failed: ' + String(e.message).replace(/\/\/[^@/\s]*@/g, '//***@'); }
+    const seen = (k) => Boolean(process.env[k]);
+    return sendJSON(res, database === 'connected' ? 200 : 503, {
+      ok: database === 'connected' && ADMIN_ENABLED,
+      database,
+      settings: {
+        MONGODB_URI: seen('MONGODB_URI'), SESSION_SECRET: seen('SESSION_SECRET'),
+        ADMIN_USERNAME: seen('ADMIN_USERNAME'), ADMIN_PASSWORD: seen('ADMIN_PASSWORD'),
+        ADMIN_PASSWORD_long_enough: ADMIN_ENABLED, RAZORPAY: RAZORPAY_ENABLED,
+      },
+      liveUpdates: database === 'connected' ? (store.supportsChangeStreams() ? 'change streams' : 'this server') : 'unknown',
+    });
+  }
   try {
     await ready();
   } catch (e) {
     console.error(`MongoDB connection failed: ${e.message}`);
-    return sendJSON(res, 503, { error: 'The booking system is temporarily unavailable. Please try again in a minute.' });
+    return sendJSON(res, 503, { error: 'The booking system is temporarily unavailable (database connection failed). Please try again in a minute.' });
   }
   return handle(req, res).catch((err) => {
     console.error(err.message);

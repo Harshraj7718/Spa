@@ -219,7 +219,14 @@ export default function AdminApp() {
     adminApi.me().then((me) => {
       if (!me.enabled) { setMessage('Admin login is turned off. Set ADMIN_PASSWORD (10+ characters) in the .env file and restart the server.'); setState('login'); }
       else setState(me.admin ? 'app' : 'login');
-    }).catch(() => { setMessage('Could not reach the server. Make sure "node server.js" is running.'); setState('login'); });
+    }).catch((e: Error) => {
+      // Show the server's own explanation when it gives one (e.g. a missing Vercel setting)
+      const generic = !e.message || /^Request failed|Failed to fetch|NetworkError|JSON/i.test(e.message);
+      setMessage(generic
+        ? 'Could not reach the server. Check that it is running – on Vercel, open /api/health to see what is wrong.'
+        : e.message);
+      setState('login');
+    });
   }, []);
 
   const endSession = useCallback((msg = '') => { setMessage(msg); setState('login'); }, []);
