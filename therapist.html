@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Book Therapist – APKASPA</title>
+  <link rel="icon" href="assets/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cinzel:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/book.css" />
+  <link rel="stylesheet" href="css/therapist.css" />
+</head>
+<body class="book-page checkout-page">
+
+<main class="book-wrap">
+  <!-- Top bar -->
+  <div class="book-top">
+    <a href="book-now.html" class="circle-btn" id="backBtn" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </a>
+    <div class="top-right">
+      <button class="circle-btn" id="favBtn" aria-label="Add to favourites">
+        <svg viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/></svg>
+      </button>
+      <a href="index.html#contact" class="circle-btn ring" aria-label="Help">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+      </a>
+      <button class="circle-btn" id="shareBtn" aria-label="Share">
+        <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Therapist profile -->
+  <section class="card profile-card">
+    <div class="profile-head">
+      <div class="p-photo media" id="pPhoto">
+        <img id="pImg" alt="" />
+        <span class="online-dot"></span>
+      </div>
+      <div class="p-info">
+        <h1 id="pName">Therapist</h1>
+        <p class="p-role" id="pRole"></p>
+        <p class="p-rating"><i>★</i> <b id="pRating"></b> <span id="pReviews"></span></p>
+        <div class="p-meta">
+          <div><small><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8.2 13.2 7 22l5-3 5 3-1.2-8.8"/></svg>Experience</small><b id="pExp"></b></div>
+          <div><small><svg viewBox="0 0 24 24"><path d="m12 3-1.9 5.8L4 10l6.1 1.2L12 17l1.9-5.8L20 10l-6.1-1.2Z"/></svg>Specializes in</small><b id="pSpec"></b></div>
+          <div><small><svg viewBox="0 0 24 24"><path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg>Languages</small><b id="pLang"></b></div>
+        </div>
+      </div>
+    </div>
+    <div class="about">
+      <h3 id="pAboutTitle">About</h3>
+      <p id="pAbout" class="clamp"></p>
+      <button class="read-more" id="readMore" type="button">Read more</button>
+    </div>
+  </section>
+
+  <form id="bookingForm" novalidate>
+    <!-- 1. Service, Date & Time -->
+    <section class="card step">
+      <h2 class="step-title"><span>1</span>Service, Date &amp; Time</h2>
+
+      <div class="stay-tabs">
+        <button type="button" class="type-tab active" data-stay="Home Stay">
+          <svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
+          <b>Home Stay</b><small>We come to your home</small>
+        </button>
+        <button type="button" class="type-tab" data-stay="Hotel Stay">
+          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M10 21v-4h4v4"/></svg>
+          <b>Hotel Stay</b><small>Service at your hotel</small>
+        </button>
+      </div>
+
+      <div class="time-head">
+        <label class="lbl-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Preferred Time <em>*</em></label>
+        <label class="date-pill">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <input type="date" id="date" required aria-label="Date" />
+        </label>
+      </div>
+
+      <!-- PHOTO (optional notice banner, e.g. holiday closure): assets/images/notice-banner.jpg -->
+      <img src="assets/images/notice-banner.jpg" alt="" class="notice-banner" id="noticeBanner" />
+
+      <div class="slots" id="slots"></div>
+      <p class="field-error" id="timeError">Please choose a time slot.</p>
+    </section>
+
+    <!-- 2. Address & Contact -->
+    <section class="card step">
+      <h2 class="step-title"><span>2</span>Address &amp; Contact</h2>
+
+      <label class="lbl" for="address" id="addressLabel">Full Address</label>
+      <div class="row-2 addr-row">
+        <input class="inp" id="address" placeholder="Apartment, street..." required autocomplete="street-address" />
+        <button type="button" class="outline-btn" id="useLocation">
+          <svg viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span>Use Location</span>
+        </button>
+      </div>
+      <p class="field-error" id="addressError">Please enter your address.</p>
+
+      <label class="lbl">Exact Location (Optional, but helps the therapist find you)</label>
+      <div id="map" class="map"></div>
+      <p class="hint" id="mapHint">Tap the map to drop a pin at the exact spot</p>
+
+      <label class="lbl" for="landmark">Landmark (Optional)</label>
+      <input class="inp" id="landmark" />
+
+      <div class="row-2">
+        <div>
+          <label class="lbl" for="mobile">Mobile Number</label>
+          <input class="inp" id="mobile" type="tel" inputmode="numeric" maxlength="10" required autocomplete="tel-national" />
+          <p class="field-error" id="mobileError">Enter a valid 10-digit number.</p>
+        </div>
+        <div>
+          <label class="lbl" for="fullName">Full Name</label>
+          <input class="inp" id="fullName" required autocomplete="name" />
+          <p class="field-error" id="nameError">Please enter your name.</p>
+        </div>
+      </div>
+
+      <div class="row-2">
+        <div>
+          <label class="lbl" for="flat" id="flatLabel">Flat/House No. (Optional)</label>
+          <input class="inp" id="flat" />
+        </div>
+        <div>
+          <label class="lbl" for="floor">Floor (Optional)</label>
+          <select class="inp" id="floor">
+            <option value="">Select floor</option>
+            <option>Ground Floor</option><option>1st Floor</option><option>2nd Floor</option>
+            <option>3rd Floor</option><option>4th Floor</option><option>5th Floor+</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="lbl" for="referral">Have an offer or referral code? (Optional)</label>
+      <div class="row-2 addr-row">
+        <input class="inp upper" id="referral" placeholder="ENTER CODE" />
+        <button type="button" class="outline-btn muted" id="applyCode">
+          <svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z"/><circle cx="7" cy="7" r="1.5"/></svg>
+          <span>Apply</span>
+        </button>
+      </div>
+      <p class="hint" id="codeMsg"></p>
+    </section>
+
+    <!-- 3. Payment Method -->
+    <section class="card step">
+      <h2 class="step-title"><span>3</span>Payment Method</h2>
+
+      <label class="pay-opt">
+        <input type="radio" name="pay" value="online" />
+        <span class="pay-icon"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+        <span class="pay-text">
+          <b>Pay Online <em class="rec">Recommended</em></b>
+          <small>Secure, instant confirmation via card, UPI or netbanking. No extra charges.</small>
+        </span>
+        <span class="radio"></span>
+      </label>
+
+      <label class="pay-opt">
+        <input type="radio" name="pay" value="cod" />
+        <span class="pay-icon"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></span>
+        <span class="pay-text">
+          <b>Cash on Delivery</b>
+          <small id="codDesc">Pay a ₹149 visiting charge online now to confirm; pay the treatment amount in cash when the therapist arrives.</small>
+        </span>
+        <span class="radio"></span>
+      </label>
+
+      <p class="secure-note" id="secureNote"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg><span></span></p>
+    </section>
+
+    <!-- 4. Bill Details -->
+    <section class="card step">
+      <h2 class="step-title"><span>4</span>Bill Details</h2>
+      <div id="bill"><p class="hint">Choose a payment method above to see your bill.</p></div>
+    </section>
+  </form>
+</main>
+
+<!-- Sticky checkout bar -->
+<div class="checkout-bar">
+  <div class="cb-left" id="cbLeft"><span class="hint">Select a payment method</span></div>
+  <button class="btn btn-primary cb-btn" id="payBtn" type="button">Continue <span>→</span></button>
+</div>
+
+<!-- Confirmation sheet -->
+<div class="sheet-backdrop" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <button class="sheet-close" id="sheetClose" aria-label="Close">×</button>
+    <h3 id="sheetTitle">Confirm your booking</h3>
+    <div id="sheetBody"></div>
+    <a class="btn btn-primary block" id="waConfirm" target="_blank" rel="noopener">Confirm on WhatsApp <span>→</span></a>
+    <p class="hint center" id="sheetNote">Our team will reply with the payment link and confirm your therapist.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="js/therapists.js"></script>
+<script src="js/therapist.js"></script>
+</body>
+</html>

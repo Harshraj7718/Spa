@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Bookings – APKASPA</title>
+  <link rel="icon" href="assets/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cinzel:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/header.css" />
+  <link rel="stylesheet" href="css/bookings.css" />
+</head>
+<body class="bookings-page">
+
+<!-- ================= HEADER (same as home) ================= -->
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a href="login.html" class="avatar" aria-label="Profile">
+      <!-- PHOTO: assets/images/avatar.jpg -->
+      <img src="assets/images/avatar.jpg" alt="" data-ph="avatar.jpg" />
+    </a>
+
+    <a href="index.html" class="brand">
+      <!-- PHOTO: assets/images/logo.png -->
+      <img src="assets/images/logo.png" alt="" class="brand-icon" data-ph="logo.png" data-hide-on-error />
+      <span>APKASPA</span>
+    </a>
+
+    <div class="topbar-actions">
+      <button class="icon-btn" aria-label="Notifications">
+        <svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      </button>
+      <button class="icon-btn" id="menuBtn" aria-label="Menu">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <button class="city-pill">
+        <svg viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        Indore
+        <svg viewBox="0 0 24 24" class="chev"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+  </div>
+
+</header>
+
+<main class="container bookings-wrap">
+  <h1 class="bk-title">My Bookings</h1>
+
+  <div class="bk-loading" id="bkLoading">Loading your bookings…</div>
+
+  <!-- Empty state (same as the original) -->
+  <div class="bk-empty" id="bkEmpty" hidden>
+    <p>You haven't booked with this device yet.</p>
+    <a href="book-now.html" class="bk-cta">Book a session →</a>
+    <p class="bk-login" id="bkLoginHint">Booked on another phone? <a href="login.html?next=bookings.html">Log in</a> to see bookings linked to your account.</p>
+  </div>
+
+  <section id="bkUpcoming" hidden>
+    <h2 class="bk-section">Upcoming</h2>
+    <div class="bk-list" id="bkUpcomingList"></div>
+  </section>
+  <section id="bkPast" hidden>
+    <h2 class="bk-section">Past</h2>
+    <div class="bk-list" id="bkPastList"></div>
+  </section>
+</main>
+
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Home</a>
+  <a href="bookings.html" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings</a>
+  <a href="book-now.html" class="nav-book"><span><svg viewBox="0 0 24 24"><path d="M12 22c-4-3-6-6-6-10a6 6 0 0 1 12 0c0 4-2 7-6 10Z"/><path d="M12 8v8M9 11l3 3 3-3"/></svg></span>Book Now</a>
+  <a href="offers.html"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z"/><circle cx="7" cy="7" r="1.5"/></svg>Offers</a>
+  <a href="login.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile</a>
+</nav>
+
+<script src="js/header.js"></script>
+<script src="js/therapists.js"></script>
+<script src="js/bookings.js"></script>
+</body>
+</html>

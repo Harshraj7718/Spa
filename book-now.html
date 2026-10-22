@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choose Booking Type – APKASPA</title>
+  <link rel="icon" href="assets/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cinzel:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/book.css" />
+</head>
+<body class="book-page">
+
+<main class="book-wrap">
+  <!-- Top bar -->
+  <div class="book-top">
+    <a href="index.html" class="circle-btn" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </a>
+    <a href="index.html#contact" class="circle-btn ring" aria-label="Help">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+    </a>
+  </div>
+
+  <h1 class="book-title">Choose Booking Type</h1>
+  <p class="book-sub">Select the type of service that suits your needs</p>
+
+  <!-- Booking type tabs -->
+  <div class="type-tabs" role="tablist">
+    <button class="type-tab active" data-type="basic" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24"><path d="M12 22c-4-3-6-6-6-10a6 6 0 0 1 12 0c0 4-2 7-6 10Z"/><path d="M12 22V12M12 15c-2-1-3-2-3-4M12 15c2-1 3-2 3-4"/></svg>
+      <b>Basic Therapist</b>
+      <small>Single therapist at your service</small>
+    </button>
+    <button class="type-tab" data-type="therapist" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <b>Therapist</b>
+      <small>Choose your favourite therapist</small>
+    </button>
+    <button class="type-tab" data-type="premium" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21a8 8 0 0 1 16 0M16 4a4 4 0 0 1 0 8M23 21a8 8 0 0 0-5-7.4"/></svg>
+      <b>Premium Therapist</b>
+      <small>A team of therapists for complete care</small>
+    </button>
+  </div>
+
+  <h2 class="fav-title">Your Favourite Therapists</h2>
+
+  <!-- Filled from js/book.js -->
+  <div class="therapist-grid" id="therapistGrid"></div>
+
+  <!-- Membership bar -->
+  <div class="member-bar">
+    <span class="crown"><svg viewBox="0 0 24 24"><path d="m2 7 5 5 5-8 5 8 5-5-2 12H4Z"/></svg></span>
+    <div class="marquee"><span>Become a Premium Member &nbsp;·&nbsp; Unlock exclusive offers &amp; savings &nbsp;&nbsp;&nbsp; Become a Premium Member &nbsp;·&nbsp; Unlock exclusive offers &amp; savings</span></div>
+    <a href="https://wa.me/919244092230" class="mini-btn" aria-label="WhatsApp" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M3 21l1.6-4.6A9 9 0 1 1 8 20Z"/></svg></a>
+    <a href="tel:+919244092230" class="mini-btn" aria-label="Call"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></a>
+    <a href="offers.html" class="join-btn">Join Now <span>→</span></a>
+  </div>
+
+  <!-- Favourite card -->
+  <div class="fav-card">
+    <span class="heart"><svg viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/></svg></span>
+    <div>
+      <b>Your Favourite, Our Priority</b>
+      <p>Quickly book your favourite therapist and enjoy personalized care.</p>
+    </div>
+  </div>
+</main>
+
+<!-- Bottom nav (same as home) -->
+<nav class="bottom-nav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Home</a>
+  <a href="bookings.html"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings</a>
+  <a href="book-now.html" class="nav-book active"><span><svg viewBox="0 0 24 24"><path d="M12 22c-4-3-6-6-6-10a6 6 0 0 1 12 0c0 4-2 7-6 10Z"/><path d="M12 8v8M9 11l3 3 3-3"/></svg></span>Book Now</a>
+  <a href="offers.html"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z"/><circle cx="7" cy="7" r="1.5"/></svg>Offers</a>
+  <a href="login.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile</a>
+</nav>
+
+<script src="js/therapists.js"></script>
+<script src="js/book.js"></script>
+</body>
+</html>

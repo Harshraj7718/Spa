@@ -1,0 +1,16 @@
+{
+  "name": "apkaspa-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "APKASPA spa website with Razorpay checkout",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mongodb": "^6.21.0"
+  }
+}
