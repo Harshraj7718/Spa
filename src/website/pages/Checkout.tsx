@@ -7,7 +7,7 @@ import { api, ApiError, type CashfreeMode, type RazorpayResponse } from '../lib/
 import { loadRazorpay } from '../lib/razorpay';
 import { loadCashfree } from '../lib/cashfree';
 import { copyText, useBodyClass, useEscape, useTitle } from '../lib/hooks';
-import { favourite, getDeviceId, savedOffer, saveLocalBooking } from '../lib/storage';
+import { favourite, getDeviceId, savedOffer } from '../lib/storage';
 import { hourLabel, longDate, rupee, shortDate, toISODate } from '../lib/format';
 import type { BookingDetails, PayMethod } from '../lib/types';
 import { photoLabel, photoUrl, type Therapist } from '../../../shared/catalog';
@@ -22,7 +22,7 @@ const FLOORS = ['Ground Floor', '1st Floor', '2nd Floor', '3rd Floor', '4th Floo
 
 type Stay = 'Home Stay' | 'Hotel Stay';
 type Errors = Partial<Record<'time' | 'address' | 'mobile' | 'name', boolean>>;
-interface Sheet { mode: 'request' | 'paid' | 'fallback'; bookingId?: string; paymentId?: string }
+interface Sheet { bookingId: string; paymentId: string }
 
 function firstDay() {
   const d = new Date();
@@ -77,7 +77,6 @@ function CheckoutPage({ t }: { t: Therapist }) {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(true);
   const [bannerOk, setBannerOk] = useState(true);
-  const requestSaved = useRef(false);
   const aboutRef = useRef<HTMLParagraphElement>(null);
   const slotsRef = useRef<HTMLDivElement>(null);
   const payRef = useRef<HTMLLabelElement>(null);
@@ -187,16 +186,24 @@ function CheckoutPage({ t }: { t: Therapist }) {
     return `https://wa.me/${BUSINESS_WHATSAPP}?text=${encodeURIComponent(msg)}`;
   };
 
-  // ---- Pay / confirm ----
-  const openSheet = (mode: Sheet['mode']) => { setSheet({ mode }); };
+  // ---- Pay: always through the payment gateway ----
+  const PAY_DOWN = 'Online payment is not available right now. Please try again in a minute.';
   const startPayment = async () => {
     setPaying(true);
     const d = details();
     let opened = false; // once Razorpay's window is open (or we're leaving for Cashfree), the button is reset elsewhere
     try {
-      if (gateway.provider === 'cashfree') {
-        const cf = await loadCashfree(gateway.mode);
-        if (!cf) { openSheet('fallback'); return; }
+      // Tapped before the page knew which gateway to use: ask the server now
+      let gw = gateway;
+      if (!gw.provider) {
+        const c = await api.config();
+        gw = { provider: c.provider || (c.razorpay ? 'razorpay' : null), mode: c.cashfreeMode || 'sandbox' };
+        setGateway(gw);
+      }
+      if (!gw.provider) { alert('Online payment is not set up on this website yet. Please try again later.'); return; }
+      if (gw.provider === 'cashfree') {
+        const cf = await loadCashfree(gw.mode);
+        if (!cf) { alert('Could not open the payment page. Please check your internet connection and try again.'); return; }
         const order = await api.createOrder(d);
         if (order.provider !== 'cashfree') throw new ApiError('Please refresh the page and try again.', 409);
         // Opens Cashfree's secure payment page; afterwards Cashfree sends the customer to /payment-return
@@ -205,7 +212,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
         else opened = true; // leaving for Cashfree – keep the button disabled
         return;
       }
-      if (!(await loadRazorpay()) || !window.Razorpay) { openSheet('fallback'); return; }
+      if (!(await loadRazorpay()) || !window.Razorpay) { alert('Could not open the payment window. Please check your internet connection and try again.'); return; }
       const order = await api.createOrder(d);
       if (order.provider !== 'razorpay') throw new ApiError('Please refresh the page and try again.', 409);
       const rzp = new window.Razorpay({
@@ -221,10 +228,8 @@ function CheckoutPage({ t }: { t: Therapist }) {
       rzp.open();
       opened = true;
     } catch (err) {
-      // Payment system down (or no internet to Razorpay): don't leave the customer stuck – offer WhatsApp
       const e = err as ApiError;
-      if (e.code === 'payment_unavailable' || e.status >= 500 || e.status === 0) openSheet('fallback');
-      else alert(e.message);
+      alert(e.code === 'payment_unavailable' || e.status >= 500 ? PAY_DOWN : e.message);
     } finally {
       if (!opened) setPaying(false);
     }
@@ -232,7 +237,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
   const verify = async (resp: RazorpayResponse) => {
     try {
       const r = await api.verifyPayment(resp);
-      setSheet({ mode: 'paid', bookingId: r.bookingId, paymentId: resp.razorpay_payment_id });
+      setSheet({ bookingId: r.bookingId, paymentId: resp.razorpay_payment_id });
     } catch {
       alert(`We received your payment (ID ${resp.razorpay_payment_id}) but could not confirm it automatically. Please share this ID with us on WhatsApp.`);
     } finally {
@@ -241,20 +246,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
   };
   const onPay = () => {
     if (!validate() || !pay) return;
-    if (gateway.provider) startPayment(); else openSheet('request');
-  };
-
-  // Save a WhatsApp request to the database (admin sees it live); keep a copy on this device if offline
-  const onWhatsApp = () => {
-    if (!sheet || sheet.mode === 'paid' || requestSaved.current) return;
-    requestSaved.current = true;
-    const d = details();
-    api.bookingRequest(d).catch(() => saveLocalBooking({
-      bookingId: 'REQ-' + Date.now().toString(36).toUpperCase(), createdAt: new Date().toISOString(), status: 'requested',
-      therapist: { name: t.name, speciality: t.speciality },
-      payment: { method: pay, paidOnline: 0, total: pay === 'online' ? treatment : treatment + VISIT_CHARGE, cashOnService: pay === 'cod' ? treatment : 0, referral: code },
-      customer: { stay, date, time, address: [flat.trim(), address.trim()].filter(Boolean).join(', ') },
-    }));
+    startPayment();
   };
 
   const closeSheet = useCallback(() => setSheet(null), []);
@@ -467,29 +459,20 @@ function CheckoutPage({ t }: { t: Therapist }) {
         </button>
       </div>
 
-      {/* Confirmation sheet */}
+      {/* Payment received (Razorpay window; Cashfree shows this on /payment-return) */}
       {sheet && (
         <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
           <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
             <button className="sheet-close" aria-label="Close" onClick={closeSheet}>×</button>
-            <h3 id="sheetTitle">{sheet.mode === 'paid' ? 'Booking confirmed 🎉' : sheet.mode === 'fallback' ? 'Confirm on WhatsApp' : 'Confirm your booking'}</h3>
+            <h3 id="sheetTitle">Booking confirmed 🎉</h3>
             <div>
-              {sheet.mode === 'paid' && <div className="success-box"><b>Booking ID: {sheet.bookingId}</b><small>Payment ID: {sheet.paymentId}</small></div>}
+              <div className="success-box"><b>Booking ID: {sheet.bookingId}</b><small>Payment ID: {sheet.paymentId}</small></div>
               {rows().map(([k, v]) => <div key={k} className="sum-row"><span>{k}</span><span>{v}</span></div>)}
             </div>
-            {sheet.mode === 'paid' ? (
-              // Paid online: the booking is already saved and shown in the admin – no WhatsApp step needed
-              <Link className="btn btn-primary block" to="/bookings">View my bookings <span>→</span></Link>
-            ) : (
-              <a className="btn btn-primary block" target="_blank" rel="noopener" onClick={onWhatsApp} href={waLink('New booking request')}>
-                Confirm on WhatsApp <span>→</span>
-              </a>
-            )}
+            <Link className="btn btn-primary block" to="/bookings">View my bookings <span>→</span></Link>
             <p className="hint center">
-              {sheet.mode === 'paid' && <>Payment received – your booking is confirmed. Our therapist will reach you at the chosen time.{' '}
-                <a href={waLink(`Paid booking ${sheet.bookingId} (payment ${sheet.paymentId})`)} target="_blank" rel="noopener">Need help? WhatsApp us</a></>}
-              {sheet.mode === 'fallback' && "Online payment isn't available right now. Send your booking on WhatsApp and we'll confirm it and share a payment link."}
-              {sheet.mode === 'request' && 'Our team will reply with the payment link and confirm your therapist.'}
+              Payment received – your booking is confirmed. Our therapist will reach you at the chosen time.{' '}
+              <a href={waLink(`Paid booking ${sheet.bookingId} (payment ${sheet.paymentId})`)} target="_blank" rel="noopener">Need help? WhatsApp us</a>
             </p>
           </div>
         </div>
