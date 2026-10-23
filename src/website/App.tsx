@@ -5,6 +5,7 @@ import { BottomNav } from './components/BottomNav';
 import { Footer } from './components/Footer';
 import { ToastProvider } from './components/Toast';
 import { AuthProvider } from './lib/auth';
+import { CatalogProvider } from './lib/catalog';
 import Home from './pages/Home';
 import BookNow from './pages/BookNow';
 import Checkout from './pages/Checkout';
@@ -68,6 +69,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+      <CatalogProvider>
         <ToastProvider>
           <ScrollManager />
           <Routes>
@@ -91,6 +93,7 @@ export default function App() {
             <Route path="*" element={<Page><NotFound /></Page>} />
           </Routes>
         </ToastProvider>
+      </CatalogProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -7,7 +7,7 @@ import { useBodyClass, useTitle } from '../lib/hooks';
 import { getDeviceId, readLocalBookings } from '../lib/storage';
 import { rupee } from '../lib/format';
 import type { CustomerBooking } from '../lib/types';
-import { BUSINESS_WHATSAPP, VISIT_CHARGE } from '../../../shared/catalog';
+import { useCatalog } from '../lib/catalog';
 import '../../styles/bookings.css';
 
 // "4:00 PM" + "2026-10-20" → Date (for sorting into upcoming / past)
@@ -28,6 +28,7 @@ const STATUS: Record<string, [string, string]> = {
 };
 
 function PayLine({ b }: { b: CustomerBooking }) {
+  const { VISIT_CHARGE } = useCatalog();
   const p = b.payment || {};
   const paidOnline = Boolean(p.paymentId) || b.status === 'paid';
   if (b.status === 'cancelled' && !paidOnline) return <>No payment due</>;
@@ -43,6 +44,7 @@ function PayLine({ b }: { b: CustomerBooking }) {
 }
 
 function BookingCard({ b, past, index }: { b: CustomerBooking; past: boolean; index: number }) {
+  const { BUSINESS_WHATSAPP } = useCatalog();
   const when = slotDate(b);
   const status = past && ['paid', 'confirmed'].includes(b.status) ? STATUS.completed : STATUS[b.status] || STATUS.requested;
   const help = encodeURIComponent(`Hi, I need help with my booking ${b.bookingId}`);

@@ -10,7 +10,8 @@ import { copyText, useBodyClass, useEscape, useTitle } from '../lib/hooks';
 import { favourite, getDeviceId, savedOffer, saveLocalBooking } from '../lib/storage';
 import { hourLabel, longDate, rupee, shortDate, toISODate } from '../lib/format';
 import type { BookingDetails, PayMethod } from '../lib/types';
-import { BUSINESS_WHATSAPP, PHOTO_DIR, VISIT_CHARGE, discountFor, getTherapist } from '../../../shared/catalog';
+import { photoLabel, photoUrl, type Therapist } from '../../../shared/catalog';
+import { useCatalog } from '../lib/catalog';
 import '../../styles/book.css';
 import '../../styles/therapist.css';
 
@@ -32,7 +33,22 @@ function firstDay() {
 export default function Checkout() {
   useBodyClass('book-page checkout-page');
   const params = useParams();
-  const t = getTherapist(params.type || 'basic', Number(params.id || 0)) || getTherapist('basic', 0)!;
+  const { getTherapist, ready } = useCatalog();
+  const t = getTherapist(params.type || 'basic', params.id || '0');
+  if (!t) {
+    return ready ? (
+      <main className="container" style={{ padding: '80px 16px', textAlign: 'center' }}>
+        <h1 style={{ color: 'var(--ink)', fontSize: 26 }}>Therapist not available</h1>
+        <p style={{ margin: '10px 0 20px' }}>This therapist isn't taking bookings right now. Please choose another one.</p>
+        <Link to="/book-now" className="btn btn-primary">Choose a therapist</Link>
+      </main>
+    ) : null;
+  }
+  return <CheckoutPage key={`${t.type}/${t.id}`} t={t} />;
+}
+
+function CheckoutPage({ t }: { t: Therapist }) {
+  const { BUSINESS_WHATSAPP, VISIT_CHARGE, discountFor } = useCatalog();
   useTitle(`Book ${t.name} – APKASPA`);
 
   // ---- Form state ----
@@ -270,7 +286,7 @@ export default function Checkout() {
         {/* Therapist profile */}
         <section className="card profile-card">
           <div className="profile-head">
-            <Photo src={PHOTO_DIR + t.photo} alt={t.name} className="p-photo" label={'therapists/' + t.photo}>
+            <Photo src={photoUrl(t.photo)} alt={t.name} className="p-photo" label={photoLabel(t.photo)}>
               <span className="online-dot" />
             </Photo>
             <div className="p-info">

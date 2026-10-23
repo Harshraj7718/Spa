@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, type CashfreeStatus } from '../lib/api';
 import { useTitle } from '../lib/hooks';
 import { rupee } from '../lib/format';
-import { BUSINESS_WHATSAPP } from '../../../shared/catalog';
+import { useCatalog } from '../lib/catalog';
 
 /**
  * Cashfree sends customers here after paying (/payment-return?order_id=…).
@@ -11,6 +11,7 @@ import { BUSINESS_WHATSAPP } from '../../../shared/catalog';
  */
 export default function PaymentReturn() {
   useTitle('Payment – APKASPA');
+  const { BUSINESS_WHATSAPP } = useCatalog();
   const [params] = useSearchParams();
   const orderId = params.get('order_id') || '';
   const [result, setResult] = useState<CashfreeStatus | null>(null);

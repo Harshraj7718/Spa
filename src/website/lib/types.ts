@@ -27,7 +27,7 @@ export interface CustomerBooking {
 /** What the checkout sends to the server */
 export interface BookingDetails {
   type: string;
-  id: number;
+  id: string;
   pay: PayMethod | '';
   code: string;
   deviceId: string;

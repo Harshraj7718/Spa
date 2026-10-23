@@ -1,5 +1,5 @@
 {
-  "_readme": "Edit therapists, prices, offers and the visiting charge here. Used by the website AND the server (which checks prices), so they always match. Photos go in public/assets/images/therapists/.",
+  "_readme": "Starting copy only: copied into MongoDB the first time the server runs. After that, edit therapists and offers in the admin dashboard (Therapists / Offers tabs).",
   "visitCharge": 149,
   "businessWhatsapp": "919244092230",
   "therapistDefaults": {

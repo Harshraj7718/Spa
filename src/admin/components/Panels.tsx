@@ -56,7 +56,7 @@ export function SubscribersPanel({ refreshKey, onError, toast }: { refreshKey: n
   );
 }
 
-const ICON: Record<string, string> = { booking_request: '📝', payment_started: '💳', payment_success: '✅', payment_failed: '⚠️', signup: '👤', subscribe: '✉️', status_change: '🔄' };
+const ICON: Record<string, string> = { booking_request: '📝', payment_started: '💳', payment_success: '✅', payment_failed: '⚠️', signup: '👤', subscribe: '✉️', status_change: '🔄', catalog_update: '🛠️' };
 
 /** Activity list (used in the side panel and the Activity tab). Re-renders every 30 s to keep "x min ago" fresh. */
 export function Feed({ events, highlight, big }: { events: AdminEvent[]; highlight?: string; big?: boolean }) {

@@ -1,24 +1,29 @@
-// Typed access to shared/catalog.json (therapists, offers, prices).
-// The server reads the same JSON and recalculates every price, so a customer can't change them.
+// Typed access to the catalog (therapists, offers, prices).
+// The live copy comes from the server (/api/catalog – editable in the admin); shared/catalog.json is the
+// built-in starting copy. The server recalculates every price itself, so a customer can't change them.
 import data from './catalog.json';
 
 export type TherapistType = 'basic' | 'therapist' | 'premium';
 
 export interface TherapistBase {
+  key?: string;
   name: string;
   rating: number;
   reviews: number;
   speciality: string;
   price: number;
+  /** Google Drive / https image address, or a file name in public/assets/images/therapists/ */
   photo: string;
   experience?: string;
   specializes?: string;
   languages?: string;
   about?: string;
+  hidden?: boolean;
 }
-export interface Therapist extends Required<TherapistBase> {
+export interface Therapist extends Required<Omit<TherapistBase, 'hidden'>> {
   type: TherapistType;
-  id: number;
+  /** Stable id used in the page address (/therapist/:type/:id) */
+  id: string;
 }
 
 export interface Offer {
@@ -29,29 +34,60 @@ export interface Offer {
   value: number;
   max?: number;
   hidden?: boolean;
+  disabled?: boolean;
 }
 
-export const VISIT_CHARGE: number = data.visitCharge;
-export const BUSINESS_WHATSAPP: string = data.businessWhatsapp;
-export const OFFERS = data.offers as Offer[];
-export const THERAPISTS = data.therapists as Record<TherapistType, TherapistBase[]>;
+export interface CatalogData {
+  visitCharge: number;
+  businessWhatsapp: string;
+  therapistDefaults: { experience: string; specializes: string; languages: string; about: string };
+  therapists: Record<TherapistType, TherapistBase[]>;
+  offers: Offer[];
+}
+
+export const BUNDLED_CATALOG = data as CatalogData;
 export const TYPES: TherapistType[] = ['basic', 'therapist', 'premium'];
 export const PHOTO_DIR = '/assets/images/therapists/';
 
 export const isTherapistType = (t: string): t is TherapistType => (TYPES as string[]).includes(t);
 
-export function getTherapist(type: string, id: number): Therapist | null {
-  if (!isTherapistType(type)) return null;
-  const base = THERAPISTS[type][id];
-  if (!base) return null;
-  return { ...data.therapistDefaults, ...base, type, id } as Therapist;
-}
+/** Stable id for a therapist. Same rule as keyOf() in server.js. */
+export const keyOf = (t: TherapistBase, i: number) =>
+  t.key || String(t.photo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9-]/gi, '') || String(i);
 
-/** ₹ discount for an offer code on a given price (0 if the code isn't valid). Mirrors server.js. */
-export function discountFor(code: string, price: number): number {
-  const offer = OFFERS.find((o) => o.code === String(code || '').trim().toUpperCase());
-  if (!offer) return 0;
-  let off = offer.kind === 'percent' ? Math.round((price * offer.value) / 100) : offer.value;
-  if (offer.max) off = Math.min(off, offer.max);
-  return Math.min(off, price);
+/** Image address for a therapist photo (Drive/https links as they are, file names from public/assets). */
+export const photoUrl = (photo: string) => (/^https?:\/\//.test(photo) ? photo : photo ? PHOTO_DIR + photo : '');
+export const photoLabel = (photo: string) => (/^https?:\/\//.test(photo) ? 'photo link not public?' : 'therapists/' + (photo || 'no photo'));
+
+/** Everything the pages need, built from one copy of the catalog. */
+export function makeCatalog(c: CatalogData) {
+  const offers = (c.offers || []).filter((o) => !o.disabled);
+  const THERAPISTS = Object.fromEntries(TYPES.map((ty) => [ty,
+    (c.therapists?.[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) })).filter((t) => !t.hidden)])) as Record<TherapistType, (TherapistBase & { key: string })[]>;
+  const all = (ty: TherapistType) => c.therapists?.[ty] || [];
+
+  return {
+    VISIT_CHARGE: c.visitCharge,
+    BUSINESS_WHATSAPP: c.businessWhatsapp,
+    OFFERS: offers,
+    THERAPISTS,
+    /** Finds a therapist by its id (or by position, for old links like /therapist/basic/0). */
+    getTherapist(type: string, id: string): Therapist | null {
+      if (!isTherapistType(type)) return null;
+      const list = all(type);
+      const index = /^\d+$/.test(id) ? Number(id) : list.findIndex((t, i) => keyOf(t, i) === id);
+      const base = list[index];
+      if (!base || base.hidden) return null;
+      return { ...c.therapistDefaults, ...base, type, id: keyOf(base, index) } as Therapist;
+    },
+    /** ₹ discount for an offer code on a given price (0 if the code isn't valid). Mirrors server.js. */
+    discountFor(code: string, price: number): number {
+      const offer = offers.find((o) => o.code === String(code || '').trim().toUpperCase());
+      if (!offer) return 0;
+      let off = offer.kind === 'percent' ? Math.round((price * offer.value) / 100) : offer.value;
+      if (offer.max) off = Math.min(off, offer.max);
+      return Math.min(off, price);
+    },
+  };
 }
+export type Catalog = ReturnType<typeof makeCatalog>;

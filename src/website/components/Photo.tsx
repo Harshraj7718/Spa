@@ -10,7 +10,7 @@ export function Photo({ src, alt = '', className = '', label, children }: {
   const [missing, setMissing] = useState(false);
   return (
     <div className={`media ${className} ${missing ? 'missing' : ''}`} data-ph={label ?? src.replace(/^\//, '')}>
-      <img src={src} alt={alt} loading="lazy" onError={() => setMissing(true)} />
+      <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setMissing(true)} />
       {children}
     </div>
   );

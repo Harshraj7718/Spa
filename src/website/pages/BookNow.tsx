@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from '../components/Icon';
 import { Photo } from '../components/Photo';
 import { useBodyClass, useTitle } from '../lib/hooks';
-import { PHOTO_DIR, THERAPISTS, isTherapistType, type TherapistType } from '../../../shared/catalog';
+import { isTherapistType, photoLabel, photoUrl, type TherapistType } from '../../../shared/catalog';
+import { useCatalog } from '../lib/catalog';
 import '../../styles/book.css';
 
 const TABS: { type: TherapistType; title: string; sub: string; icon: IconName }[] = [
@@ -17,6 +18,7 @@ export default function BookNow() {
   useBodyClass('book-page');
   const { hash } = useLocation();
   const navigate = useNavigate();
+  const { THERAPISTS, ready } = useCatalog();
   // The open tab lives in the address (#basic / #therapist / #premium), so links can open a tab directly
   const hashType = hash.slice(1);
   const type: TherapistType = isTherapistType(hashType) ? hashType : 'basic';
@@ -44,10 +46,11 @@ export default function BookNow() {
       <h2 className="fav-title">Your Favourite Therapists</h2>
 
       <div className="therapist-grid" key={type}>
+        {ready && !THERAPISTS[type].length && <p className="book-sub">No therapists listed here right now – please check another type.</p>}
         {THERAPISTS[type].map((t, i) => (
-          <Link key={t.name} to={`/therapist/${type}/${i}`} className="t-card" style={{ animationDelay: `${i * 40}ms` }}>
-            {/* PHOTO: public/assets/images/therapists/<photo> */}
-            <Photo src={PHOTO_DIR + t.photo} alt={t.name} className="t-photo" label={'therapists/' + t.photo} />
+          <Link key={t.key} to={`/therapist/${type}/${t.key}`} className="t-card" style={{ animationDelay: `${i * 40}ms` }}>
+            {/* PHOTO: Google Drive link set in the admin, or public/assets/images/therapists/<photo> */}
+            <Photo src={photoUrl(t.photo)} alt={t.name} className="t-photo" label={photoLabel(t.photo)} />
             <p className="t-status">Available</p>
             <h3 className="t-name">{t.name}</h3>
             <p className="t-rating"><i>★</i> {t.rating} ({t.reviews})</p>

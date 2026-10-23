@@ -35,6 +35,14 @@ export interface Analytics {
   tiles: { avgValue: number; cancelRate: number; repeatCustomers: number; uniqueCustomers: number; offerShare: number; discountSum: number; revenue: number };
 }
 
+export type TherapistType = 'basic' | 'therapist' | 'premium';
+export interface AdminTherapist {
+  key?: string; name: string; speciality: string; price: number; rating: number; reviews: number; photo: string;
+  experience?: string; specializes?: string; languages?: string; about?: string; hidden?: boolean;
+}
+export interface AdminOffer { code: string; title: string; desc: string; kind: 'percent' | 'flat'; value: number; max?: number; hidden?: boolean; disabled?: boolean }
+export interface AdminCatalog { therapists: Record<TherapistType, AdminTherapist[]>; offers: AdminOffer[]; version: string }
+
 export class SessionEnded extends Error {}
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -56,6 +64,9 @@ export const adminApi = {
   customers: () => call<{ customers: Customer[] }>('/api/admin/customers'),
   subscribers: () => call<{ subscribers: Subscriber[] }>('/api/admin/subscribers'),
   events: () => call<{ events: AdminEvent[] }>('/api/admin/events'),
+  catalog: () => call<AdminCatalog>('/api/admin/catalog'),
+  saveCatalog: (b: Partial<Pick<AdminCatalog, 'therapists' | 'offers'>> & { version: string; note: string }) =>
+    call<{ ok: true; version: string }>('/api/admin/catalog', { method: 'PUT', body: JSON.stringify(b) }),
   analytics: (days: number) => call<Analytics>('/api/admin/analytics?days=' + days),
 };
 

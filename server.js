@@ -54,18 +54,41 @@ const ADMIN_ENABLED = ADMIN_PASSWORD.length >= 10;
 
 const { col, toId } = store;
 
-// ---------- Prices: read the same shared/catalog.json the website uses ----------
-function loadCatalog() {
-  const c = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8')); // re-read each time so price edits apply without a restart
+// ---------- Catalog: therapists, offers & prices ----------
+// Stored in MongoDB (collection "settings", document "catalog") so the admin can edit it.
+// On first run it is copied from shared/catalog.json. The server always prices bookings from here.
+const TYPES = ['basic', 'therapist', 'premium'];
+const CATALOG_ID = 'catalog';
+// Stable id for a therapist (used in page addresses). Same rule as keyOf() in shared/catalog.ts.
+const keyOf = (t, i) => t.key || String(t.photo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9-]/gi, '') || String(i);
+
+async function readCatalog() {
+  const found = await col('settings').findOne({ _id: CATALOG_ID });
+  if (found) return found;
+  const c = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
+  const seed = {
+    _id: CATALOG_ID, visitCharge: c.visitCharge, businessWhatsapp: c.businessWhatsapp, therapistDefaults: c.therapistDefaults,
+    therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) }))])),
+    offers: c.offers, updatedAt: new Date(),
+  };
+  try { await col('settings').insertOne(seed); } catch (e) { if (e.code !== 11000) throw e; } // another copy seeded it first
+  return col('settings').findOne({ _id: CATALOG_ID });
+}
+
+async function loadCatalog() {
+  const c = await readCatalog();
+  const offers = (c.offers || []).filter((o) => !o.disabled);
   return {
     VISIT_CHARGE: c.visitCharge,
     getTherapist(type, id) {
-      const base = (c.therapists[type] || [])[id];
-      return base ? { ...c.therapistDefaults, ...base } : null;
+      const list = c.therapists?.[type] || [];
+      const sid = String(id);
+      const base = /^\d+$/.test(sid) ? list[Number(sid)] : list.find((t, i) => keyOf(t, i) === sid); // numbers = old links
+      return base && !base.hidden ? { ...c.therapistDefaults, ...base } : null;
     },
     // Same rule as discountFor() in shared/catalog.ts
     discountFor(code, price) {
-      const offer = c.offers.find((o) => o.code === String(code || '').trim().toUpperCase());
+      const offer = offers.find((o) => o.code === String(code || '').trim().toUpperCase());
       if (!offer) return 0;
       let off = offer.kind === 'percent' ? Math.round((price * offer.value) / 100) : offer.value;
       if (offer.max) off = Math.min(off, offer.max);
@@ -74,9 +97,104 @@ function loadCatalog() {
   };
 }
 
-function quote({ type, id, pay, code }) {
-  const cat = loadCatalog();
-  const t = cat.getTherapist(String(type), Number(id));
+/** What the website needs: visible therapists and active offers. */
+async function publicCatalog() {
+  const c = await readCatalog();
+  return {
+    visitCharge: c.visitCharge, businessWhatsapp: c.businessWhatsapp, therapistDefaults: c.therapistDefaults,
+    therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists?.[ty] || [])
+      .map((t, i) => ({ ...t, key: keyOf(t, i) })).filter((t) => !t.hidden)])),
+    offers: (c.offers || []).filter((o) => !o.disabled),
+  };
+}
+
+/**
+ * Turns a Google Drive share link into a direct image address.
+ * Accepts: drive.google.com/file/d/ID/view, …open?id=ID, …uc?id=ID, lh3.googleusercontent.com/d/ID,
+ * any other https:// image address, or a file name in public/assets/images/therapists/.
+ */
+function normalizePhoto(input) {
+  const v = String(input || '').trim();
+  if (!v) return '';
+  if (/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(v)) throw new Error('That is a folder link. Open the photo itself in Google Drive and copy its link.');
+  const drive = v.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/|(?:open|uc)\?(?:[^#]*&)?id=)([\w-]{10,})/)
+    || v.match(/googleusercontent\.com\/d\/([\w-]{10,})/);
+  if (drive) return `https://lh3.googleusercontent.com/d/${drive[1]}`;
+  if (/^https:\/\/[^\s"'<>]{4,490}$/.test(v)) return v;
+  if (/^[\w.-]{1,80}\.(jpe?g|png|webp|gif|avif)$/i.test(v)) return v;
+  throw new Error('Photo must be a Google Drive link (or an https:// image address).');
+}
+
+const num = (v, min, max, label, int = true) => {
+  const n = Number(v);
+  if (v === '' || v === null || !Number.isFinite(n) || n < min || n > max || (int && !Number.isInteger(n))) {
+    throw new Error(`${label} must be a ${int ? 'whole ' : ''}number from ${min} to ${max}.`);
+  }
+  return n;
+};
+const text = (v, max, label, required = false) => {
+  const s = String(v ?? '').trim().replace(/\s+/g, ' ');
+  if (required && !s) throw new Error(`${label} is required.`);
+  if (s.length > max) throw new Error(`${label} must be at most ${max} characters.`);
+  return s;
+};
+
+function cleanTherapists(input) {
+  const out = {};
+  const keys = new Set();
+  for (const ty of TYPES) {
+    const list = Array.isArray(input?.[ty]) ? input[ty] : [];
+    if (list.length > 60) throw new Error('At most 60 therapists per type.');
+    out[ty] = list.map((t, i) => {
+      const name = text(t.name, 40, `Name (${ty} therapist #${i + 1})`, true);
+      let key = /^[a-z0-9][a-z0-9-]{1,39}$/i.test(String(t.key || '')) ? String(t.key) : 't' + crypto.randomBytes(4).toString('hex');
+      if (keys.has(key)) key = 't' + crypto.randomBytes(4).toString('hex');
+      keys.add(key);
+      let photo;
+      try { photo = normalizePhoto(t.photo); } catch (e) { throw new Error(`${name}: ${e.message}`); }
+      const r = {
+        key, name, photo,
+        rating: Math.round(num(t.rating ?? 5, 0, 5, `${name}: Rating`, false) * 10) / 10,
+        reviews: num(t.reviews ?? 0, 0, 1e6, `${name}: Reviews`),
+        speciality: text(t.speciality, 60, `${name}: Speciality`, true),
+        price: num(t.price, 1, 100000, `${name}: Price`),
+      };
+      // Optional texts – the "therapistDefaults" are shown when they're empty
+      for (const [f, max] of [['experience', 40], ['specializes', 80], ['languages', 80], ['about', 600]]) {
+        const v = text(t[f], max, `${name}: ${f}`);
+        if (v) r[f] = v;
+      }
+      if (t.hidden) r.hidden = true;
+      return r;
+    });
+  }
+  return out;
+}
+
+function cleanOffers(input) {
+  const list = Array.isArray(input) ? input : [];
+  if (list.length > 30) throw new Error('At most 30 offers.');
+  const codes = new Set();
+  return list.map((o, i) => {
+    const code = String(o.code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{3,20}$/.test(code)) throw new Error(`Offer #${i + 1}: the code must be 3–20 letters/numbers (no spaces).`);
+    if (codes.has(code)) throw new Error(`The code ${code} is used twice.`);
+    codes.add(code);
+    const kind = o.kind === 'flat' ? 'flat' : 'percent';
+    const r = {
+      code, title: text(o.title, 60, `${code}: Title`, true), desc: text(o.desc, 200, `${code}: Description`), kind,
+      value: kind === 'percent' ? num(o.value, 1, 90, `${code}: Percent off`) : num(o.value, 1, 100000, `${code}: ₹ off`),
+    };
+    if (o.max !== undefined && o.max !== null && o.max !== '' && Number(o.max) > 0) r.max = num(o.max, 1, 100000, `${code}: Maximum discount`);
+    if (o.hidden) r.hidden = true;     // works at checkout but isn't listed on the Offers page
+    if (o.disabled) r.disabled = true; // switched off completely
+    return r;
+  });
+}
+
+async function quote({ type, id, pay, code }) {
+  const cat = await loadCatalog();
+  const t = cat.getTherapist(String(type), clip(id, 40));
   if (!t) throw new Error('Unknown therapist');
   if (pay !== 'online' && pay !== 'cod') throw new Error('Unknown payment method');
   const cleanCode = String(code || '').trim().toUpperCase();
@@ -488,6 +606,10 @@ async function handle(req, res) {
     });
   }
 
+  if (pathname === '/api/catalog' && req.method === 'GET') {
+    return sendJSON(res, 200, await publicCatalog());
+  }
+
   // ===== Customer accounts =====
   if (pathname === '/api/signup' && req.method === 'POST') {
     const body = await readBody(req);
@@ -547,7 +669,7 @@ async function handle(req, res) {
   // WhatsApp booking request (no online payment) – saved so the admin sees it immediately
   if (pathname === '/api/booking-request' && req.method === 'POST') {
     const body = await readBody(req);
-    const q = quote(body);
+    const q = await quote(body);
     const customer = cleanCustomer(body.customer);
     const problem = customerError(customer);
     if (problem) return sendJSON(res, 400, { error: problem });
@@ -555,7 +677,7 @@ async function handle(req, res) {
     const booking = {
       bookingId: newBookingId('REQ'), source: 'whatsapp', status: 'requested', createdAt: new Date(),
       deviceHash: deviceHashOf(body.deviceId), userId: user ? String(user._id) : '',
-      therapist: { type: clip(body.type, 20), id: Number(body.id), name: q.therapist.name, speciality: q.therapist.speciality },
+      therapist: { type: clip(body.type, 20), id: clip(body.id, 40), name: q.therapist.name, speciality: q.therapist.speciality },
       payment: {
         method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: 0,
         total: q.treatment + (body.pay === 'cod' ? q.visitCharge : 0), cashOnService: q.cashLater,
@@ -586,7 +708,7 @@ async function handle(req, res) {
   if (pathname === '/api/create-order' && req.method === 'POST') {
     if (!PROVIDER) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     const body = await readBody(req);
-    const q = quote(body);
+    const q = await quote(body);
     const customer = cleanCustomer(body.customer);
     const problem = customerError(customer);
     if (problem) return sendJSON(res, 400, { error: problem });
@@ -595,7 +717,7 @@ async function handle(req, res) {
     const newBooking = (orderId, gateway) => ({
       bookingId, source: 'online', status: 'pending_payment', createdAt: new Date(),
       deviceHash: deviceHashOf(body.deviceId), userId: user ? String(user._id) : '',
-      therapist: { type: clip(body.type, 20), id: Number(body.id), name: q.therapist.name, speciality: q.therapist.speciality },
+      therapist: { type: clip(body.type, 20), id: clip(body.id, 40), name: q.therapist.name, speciality: q.therapist.speciality },
       payment: {
         method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: q.payNow,
         cashOnService: q.cashLater, total: q.payNow + q.cashLater, orderId, gateway,
@@ -875,6 +997,32 @@ async function handle(req, res) {
           createdAt: iso(u.createdAt), lastLoginAt: iso(u.lastLoginAt), bookings: byUser[String(u._id)] || 0,
         })),
       });
+    }
+
+    // Therapists & offers editor
+    if (pathname === '/api/admin/catalog' && req.method === 'GET') {
+      const c = await readCatalog();
+      return sendJSON(res, 200, {
+        therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists?.[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) }))])),
+        offers: c.offers || [], version: new Date(c.updatedAt).toISOString(),
+      });
+    }
+    if (pathname === '/api/admin/catalog' && req.method === 'PUT') {
+      const body = await readBody(req);
+      const current = await readCatalog();
+      // Two admins editing at once: don't silently overwrite the other's changes
+      if (body.version && body.version !== new Date(current.updatedAt).toISOString()) {
+        return sendJSON(res, 409, { error: 'Someone else changed this list a moment ago. Reload the page and try again.' });
+      }
+      const $set = { updatedAt: new Date() };
+      const what = [];
+      if (body.therapists !== undefined) { $set.therapists = cleanTherapists(body.therapists); what.push('therapists'); }
+      if (body.offers !== undefined) { $set.offers = cleanOffers(body.offers); what.push('offers'); }
+      if (!what.length) return sendJSON(res, 400, { error: 'Nothing to save.' });
+      await col('settings').updateOne({ _id: CATALOG_ID }, { $set });
+      const note = body.note ? ` (${clip(body.note, 80)})` : '';
+      await logEvent('catalog_update', `Admin updated the ${what.join(' and ')}${note} – live on the website`);
+      return sendJSON(res, 200, { ok: true, version: $set.updatedAt.toISOString() });
     }
 
     if (pathname === '/api/admin/subscribers' && req.method === 'GET') {

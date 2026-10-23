@@ -79,15 +79,33 @@ public/assets/
         └── premium-1.jpg … premium-3.jpg
 ```
 
-## Therapists, prices and offers
+## Therapists, prices and offers (edit them in the admin)
 
-Everything is in **`shared/catalog.json`**:
-- `therapists` — names, ratings, specialities, prices and photo file names for each tab (`basic`, `therapist`, `premium`). Optional per therapist: `experience`, `specializes`, `languages`, `about` (otherwise `therapistDefaults` is used).
-- `offers` — `code`, `title`, `desc`, `kind` (`percent` or `flat`), `value`, optional `max` (₹ cap) or `hidden: true` (works at checkout but isn't listed on the Offers page).
-- `visitCharge` — the Cash-on-Delivery visiting charge; `businessWhatsapp` — your WhatsApp number.
+Open **Admin → Therapists** or **Admin → Offers**. Changes are saved in MongoDB and show on the website straight away –
+no rebuild or redeploy needed.
 
-The server re-reads this file on every payment and recalculates the price itself, so nobody can change a price in their browser.
-Run `npm run build` after editing so the website shows the new values.
+**Therapists:** add, edit (name, speciality, price, rating, reviews, experience, languages, about), move up/down,
+**Hide** (taken off the website but kept for later) or **Delete**. Use the *Type* box to move someone between
+Basic / Therapist / Premium.
+
+**Photos from Google Drive:**
+1. Upload the photo to Google Drive.
+2. Right-click it → **Share** → under *General access* choose **Anyone with the link** → **Copy link**.
+3. Paste the link into the therapist's *Photo – Google Drive link* box. The preview shows the photo; if it says
+   "Can't load", the photo isn't shared publicly yet. (A folder link won't work – it must be the photo's own link.)
+
+The server turns the Drive link into a direct image address automatically. Any other `https://` image address also works,
+and so does a file name in `public/assets/images/therapists/`.
+
+**Offers:** add or edit the code, title, description, % or ₹ off and an optional maximum discount.
+*Active* switches the code on/off at checkout; untick *Show on the Offers page* for a secret code that still works.
+
+Every booking is priced by the server from these saved values, so nobody can change a price in their browser.
+Each change is listed in the admin's Activity feed (🛠️).
+
+`shared/catalog.json` is only the **starting copy**: it fills the database the first time the server runs, and the
+website uses it for a moment until the live list arrives. After that, edit in the admin, not in the file.
+The visiting charge (`visitCharge`) and WhatsApp number (`businessWhatsapp`) are also in this starting copy.
 
 Other settings: time-slot hours at the top of `src/website/pages/Checkout.tsx`, menu links and cities in `src/website/components/Header.tsx`, the map's starting point in `src/website/components/MapPicker.tsx`.
 
@@ -137,11 +155,13 @@ Everything is stored in the `apkaspa` database:
 | `users` | Customer accounts |
 | `bookings` | Every booking: WhatsApp requests, online payments, cash on delivery |
 | `subscribers` | Newsletter sign-ups |
+| `settings` | Therapists, prices and offers (document `catalog`, edited in the admin) |
 | `events` | Activity log for the live feed (auto-deleted after 90 days) |
 
 **Admin dashboard — `/admin`:** sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` (10+ characters; session lasts 12 hours).
 - **Live** updates with no refresh (green dot), optional sound for new bookings/payments.
 - **Bookings:** filters, search, Call/WhatsApp/map links, change status (customers see it on My Bookings).
+- **Therapists** and **Offers:** edit what the website shows (see above).
 - **Analytics:** 7/30/90-day tiles and charts, each with a Table view.
 - **Customers**, **Subscribers** (copy all emails) and **Activity**.
 

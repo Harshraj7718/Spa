@@ -3,11 +3,14 @@ import { adminApi, rupee, SessionEnded, type AdminEvent, type Summary } from './
 import { BookingsPanel } from './components/Bookings';
 import { CustomersPanel, Feed, SubscribersPanel } from './components/Panels';
 import { Analytics } from './components/Analytics';
+import { OffersPanel, TherapistsPanel } from './components/Catalog';
 
-type Tab = 'bookings' | 'analytics' | 'customers' | 'subscribers' | 'activity';
+type Tab = 'bookings' | 'analytics' | 'therapists' | 'offers' | 'customers' | 'subscribers' | 'activity';
 const TABS: Record<Tab, [string, string]> = {
   bookings: ['Bookings', 'Every booking, updated in real time.'],
   analytics: ['Analytics', 'How the business is doing – updates live as bookings come in.'],
+  therapists: ['Therapists', 'Add or edit therapists, prices and photos – changes show on the website straight away.'],
+  offers: ['Offers', 'Offer codes for the Offers page and checkout.'],
   customers: ['Customers', 'People who created an account on the website.'],
   subscribers: ['Subscribers', 'Newsletter sign-ups from the website footer.'],
   activity: ['Activity', 'Everything happening on the website, as it happens.'],
@@ -15,6 +18,8 @@ const TABS: Record<Tab, [string, string]> = {
 const NAV_ICONS: Record<Tab, ReactNode> = {
   bookings: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
   analytics: <><path d="M3 3v18h18" /><path d="M7 16v-4M12 16V8M17 16v-7" /></>,
+  therapists: <><circle cx="12" cy="7" r="4" /><path d="M5 21a7 7 0 0 1 14 0" /><path d="m17 3 1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L14 5.3l2-.3z" /></>,
+  offers: <><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
   customers: <><circle cx="9" cy="8" r="4" /><path d="M1 21a8 8 0 0 1 16 0M16 4a4 4 0 0 1 0 8M23 21a8 8 0 0 0-5-7.4" /></>,
   subscribers: <><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></>,
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
@@ -146,7 +151,7 @@ function Dashboard({ onSessionEnd }: { onSessionEnd: (msg?: string) => void }) {
     if (on) ding();
   };
   const logout = async () => { try { await adminApi.logout(); } catch { /* ignore */ } onSessionEnd(); };
-  const noFeed = tab === 'activity' || tab === 'analytics';
+  const noFeed = tab === 'activity' || tab === 'analytics' || tab === 'therapists' || tab === 'offers';
 
   return (
     <div className="app">
@@ -190,6 +195,8 @@ function Dashboard({ onSessionEnd }: { onSessionEnd: (msg?: string) => void }) {
           <div className="panel-wrap">
             {tab === 'bookings' && <BookingsPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'analytics' && <Analytics refreshKey={refreshKey} onError={onError} />}
+            {tab === 'therapists' && <TherapistsPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
+            {tab === 'offers' && <OffersPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'customers' && <CustomersPanel refreshKey={refreshKey} onError={onError} />}
             {tab === 'subscribers' && <SubscribersPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'activity' && <section className="panel"><Feed events={events} highlight={highlight} big /></section>}

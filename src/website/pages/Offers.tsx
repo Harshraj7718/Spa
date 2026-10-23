@@ -4,7 +4,8 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { copyText, useBodyClass, useTitle } from '../lib/hooks';
 import { savedOffer } from '../lib/storage';
-import { OFFERS, type Offer } from '../../../shared/catalog';
+import type { Offer } from '../../../shared/catalog';
+import { useCatalog } from '../lib/catalog';
 import '../../styles/offers.css';
 
 const badge = (o: Offer) => (o.kind === 'percent' ? `${o.value}% OFF` : `₹${o.value} OFF`);
@@ -13,6 +14,7 @@ export default function Offers() {
   useTitle('Offers – APKASPA');
   useBodyClass('offers-page');
   const toast = useToast();
+  const { OFFERS } = useCatalog();
   const navigate = useNavigate();
   const [copied, setCopied] = useState('');
   const visible = OFFERS.filter((o) => !o.hidden);

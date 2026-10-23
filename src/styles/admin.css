@@ -203,3 +203,67 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 
 /* When the live feed is hidden (Analytics, Activity), give the content the full width */
 .layout.no-feed { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------- Therapists & Offers editor ---------- */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip b { margin-left: 4px; font-weight: 600; opacity: .7; }
+.chip.icon { padding: 7px 11px; }
+.chip.danger { color: var(--red); }
+.chip.danger:hover { border-color: var(--red); }
+.chip:disabled { opacity: .45; cursor: default; }
+.pill { display: inline-block; font-style: normal; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: #eeece6; color: var(--muted); margin: 2px 4px 2px 0; }
+.pill.on { background: #e6efd6; color: #4d6326; }
+.pill.off { background: #fbe4e4; color: var(--red); }
+.code { font-family: ui-monospace, Consolas, monospace; letter-spacing: 1px; }
+tr.dim td { opacity: .55; }
+.row-actions { white-space: nowrap; text-align: right; }
+.row-actions .chip { margin-left: 4px; }
+
+.t-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; padding: 16px; }
+.t-admin { display: grid; grid-template-columns: 76px 1fr; gap: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #fff; }
+.t-admin.is-hidden { background: #faf8f3; }
+.t-admin.is-hidden .thumb, .t-admin.is-hidden .t-admin-body > :not(.pill) { opacity: .55; }
+.t-admin-body { min-width: 0; display: grid; align-content: start; gap: 2px; }
+.t-admin-body b { color: var(--ink); font-size: 15px; }
+.t-admin-body small, .t-admin-body span { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-admin-body span { color: var(--text); }
+.t-admin-body .pill { justify-self: start; }
+.t-admin-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+
+.thumb { width: 76px; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--green-soft); display: grid; place-items: center; text-align: center; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb span { font-size: 10.5px; color: var(--muted); padding: 4px; line-height: 1.3; }
+.thumb.big { width: 110px; flex-shrink: 0; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(20,28,12,.45); display: grid; place-items: center; padding: 16px; }
+.modal { background: #fff; border-radius: 20px; width: 100%; max-width: 640px; max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 30px 60px rgba(0,0,0,.3); }
+.modal header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 0; }
+.modal h2 { font-size: 19px; color: var(--ink); }
+.modal-x { font-size: 26px; line-height: 1; color: var(--muted); padding: 0 4px; }
+.edit-form { padding: 16px 22px 20px; }
+.photo-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.photo-row .field { flex: 1; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.field { display: grid; gap: 5px; align-content: start; }
+.field.wide, .check.wide { grid-column: 1 / -1; }
+.field > span { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: #faf8f3; outline: none; font: inherit; color: var(--ink); }
+.field textarea { resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--green); background: #fff; }
+.field small { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.field small b { color: var(--ink); }
+.field small .bad { color: var(--red); font-weight: 500; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--ink); }
+.check input { width: 17px; height: 17px; accent-color: var(--green); }
+.edit-form footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+@media (max-width: 860px) {
+  .row-actions { text-align: left; }
+  .row-actions .chip { margin: 0 6px 0 0; }
+}
+@media (max-width: 560px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .photo-row { flex-direction: column; }
+  .t-admin-grid { padding: 12px; grid-template-columns: 1fr; }
+  .modal { border-radius: 16px; }
+}
