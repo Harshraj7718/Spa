@@ -1,7 +1,7 @@
 # APKASPA – Spa Website
 
 The website and the admin dashboard are built with **React + TypeScript** (bundled by **Vite**).
-A small **Node.js** server (`server.js`) serves them, stores everything in **MongoDB**, and takes payments with **Razorpay**.
+A small **Node.js** server (`server.js`) serves them, stores everything in **MongoDB**, and takes payments with **Cashfree** (Razorpay also supported).
 
 ## Quick start
 
@@ -53,6 +53,7 @@ spa/
 | `/offers` | Offers |
 | `/bookings` | My Bookings |
 | `/login`, `/signup` | Log in / Create account (`?next=/bookings` returns there after login) |
+| `/payment-return` | Where Cashfree sends customers after paying (shows confirmed / failed) |
 | `/admin` | Admin dashboard |
 
 Old addresses (`index.html`, `book-now.html`, `therapist.html?type=…&id=…`, `offers.html`, `login.html`…) redirect to the new ones automatically.
@@ -90,32 +91,38 @@ Run `npm run build` after editing so the website shows the new values.
 
 Other settings: time-slot hours at the top of `src/website/pages/Checkout.tsx`, menu links and cities in `src/website/components/Header.tsx`, the map's starting point in `src/website/components/MapPicker.tsx`.
 
-## Online payments (Razorpay)
+## Online payments (Cashfree)
 
-1. Copy `.env.example` to `.env` and add your keys from the Razorpay Dashboard → Account & Settings → API Keys (start with **Test mode** `rzp_test_…`).
-2. Restart `node server.js` — it shows `Razorpay: ON (TEST mode)`.
+1. Put your keys in `.env` (see `.env.example`): `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV=sandbox`.
+   Get them from the Cashfree Merchant Dashboard → **Developers → API Keys** (start with the **Test** keys).
+2. Restart `node server.js` — it shows `Payments: Cashfree (SANDBOX test mode)`.
 
-- **Pay Online** charges the full treatment amount (minus any offer); **Cash on Delivery** charges only the visiting charge online.
-- After payment the server checks Razorpay's signature, then marks the booking paid in MongoDB.
-- If keys are missing or Razorpay is unreachable, the customer is offered **Confirm on WhatsApp** instead — they're never stuck.
-### Razorpay webhook (recommended)
-Records payments even if a customer closes the page before returning to your site.
-1. Razorpay Dashboard → **Settings → Webhooks → Add New Webhook**.
-2. URL:  · Secret: any long password you choose · Events: **payment.captured**, **payment.failed**.
-3. Put the same secret in  (in  and on Vercel).
-4. On Vercel also add  so the webhook can check Razorpay's signature.
+How it works:
+- **Pay Online** charges the full treatment amount (minus any offer); **Cash on Delivery** charges only the ₹149 visiting charge online.
+  The server calculates the amount itself from `shared/catalog.json` – a customer can't change it.
+- The button saves the booking as *Awaiting payment* and sends the customer to Cashfree's secure page (UPI, cards, netbanking, wallets).
+- Afterwards Cashfree returns them to `/payment-return`. That page asks the server, the server asks **Cashfree** whether the order is
+  really `PAID` (and for the right amount), then marks the booking **Paid** – it appears in the admin instantly.
+- Failed or cancelled payments show "Payment not completed" to the customer and a ⚠️ in the admin's Activity feed.
+- If keys are missing or Cashfree is unreachable, the customer is offered **Confirm on WhatsApp** instead – never stuck.
 
-- Test with Razorpay's test details (e.g. UPI `success@razorpay`). To go live: finish KYC, use `rzp_live_…` keys, host with HTTPS.
-- After paying, the customer sees **Booking confirmed** with a **View my bookings** button; the booking shows as **Paid** in the admin instantly.
+**Testing in sandbox:** on Cashfree's page pay by UPI ID `testsuccess@gocash` (succeeds) or `testfailure@gocash` (fails),
+or use the test cards listed in Cashfree's docs. No real money moves.
 
-### Razorpay webhook (recommended)
-Records a payment even if the customer closes the page before returning to your site.
-1. Razorpay Dashboard → **Settings → Webhooks → Add New Webhook**.
-2. URL: `https://YOUR-SITE/api/razorpay-webhook` · Secret: any long password you choose · Events: **payment.captured** and **payment.failed**.
-3. Put the same secret in `RAZORPAY_WEBHOOK_SECRET` (in `.env` and on Vercel).
-4. On Vercel also add `NODEJS_HELPERS=0`, so the webhook can check Razorpay's signature.
+**Going live:** finish KYC in Cashfree, generate **Production** keys, set `CASHFREE_ENV=production` with those keys,
+and add your website domain under Developers → **Whitelisted domains** (Cashfree only redirects to approved domains). HTTPS is required.
 
-Failed payments appear in the admin's Activity feed (⚠️). Checkout and webhook can both report the same payment safely – it's recorded once.
+### Cashfree webhook (recommended)
+Records a payment even if the customer closes the browser before returning to your site.
+1. Cashfree Dashboard → **Developers → Webhooks → Add Webhook URL**: `https://YOUR-SITE/api/cashfree-webhook`, Payment events (success/failed).
+2. Nothing else to set – the server checks Cashfree's signature with your `CASHFREE_SECRET_KEY`.
+3. On Vercel also add `NODEJS_HELPERS=0` so the signature can be checked.
+
+Checkout and webhook can both report the same payment safely – it's recorded once.
+
+### Razorpay (optional alternative)
+Add `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` instead of the Cashfree keys (or set `PAYMENT_PROVIDER=razorpay` when both are present).
+Its webhook is `https://YOUR-SITE/api/razorpay-webhook` (events **payment.captured**, **payment.failed**) with its secret in `RAZORPAY_WEBHOOK_SECRET`.
 
 ## Accounts
 
@@ -162,7 +169,8 @@ request runs `api/index.js` (the same code as `server.js`) as a serverless funct
    ```
    or push the folder to GitHub and use **Vercel → Add New → Project → Import**.
 4. **Vercel → Project → Settings → Environment Variables** (Production): `MONGODB_URI`, `ADMIN_USERNAME`,
-   `ADMIN_PASSWORD`, `SESSION_SECRET`, and optionally `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`.
+   `ADMIN_PASSWORD`, `SESSION_SECRET`, and for payments `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV`
+   (plus `NODEJS_HELPERS=0` for the payment webhook).
 5. Deploy to production: `npx vercel --prod` (or push to GitHub again).
 
 How it behaves on Vercel:

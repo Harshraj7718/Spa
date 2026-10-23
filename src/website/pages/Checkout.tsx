@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { Photo } from '../components/Photo';
 import { MapPicker, type LatLng } from '../components/MapPicker';
-import { api, ApiError, type RazorpayResponse } from '../lib/api';
+import { api, ApiError, type CashfreeMode, type RazorpayResponse } from '../lib/api';
 import { loadRazorpay } from '../lib/razorpay';
+import { loadCashfree } from '../lib/cashfree';
 import { copyText, useBodyClass, useEscape, useTitle } from '../lib/hooks';
 import { favourite, getDeviceId, savedOffer, saveLocalBooking } from '../lib/storage';
 import { hourLabel, longDate, rupee, shortDate, toISODate } from '../lib/format';
@@ -54,7 +55,7 @@ export default function Checkout() {
   const [errors, setErrors] = useState<Errors>({});
   const [locating, setLocating] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [razorpayOn, setRazorpayOn] = useState(false);
+  const [gateway, setGateway] = useState<{ provider: 'cashfree' | 'razorpay' | null; mode: CashfreeMode }>({ provider: null, mode: 'sandbox' });
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [fav, setFav] = useState(() => favourite.has(`${t.type}:${t.name}`));
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -68,8 +69,17 @@ export default function Checkout() {
 
   const treatment = Math.max(t.price - discount, 0);
   const hotel = stay === 'Hotel Stay';
+  const gatewayName = gateway.provider === 'razorpay' ? 'Razorpay' : 'Cashfree (UPI, cards, netbanking)';
 
-  useEffect(() => { api.config().then((c) => setRazorpayOn(Boolean(c.razorpay))).catch(() => {}); }, []);
+  // Customer pressed Back on Cashfree's page: the browser may restore this page as it was, so re-enable Pay
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) setPaying(false); };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
+  useEffect(() => {
+    api.config().then((c) => setGateway({ provider: c.provider || (c.razorpay ? 'razorpay' : null), mode: c.cashfreeMode || 'sandbox' })).catch(() => {});
+  }, []);
   useLayoutEffect(() => { const p = aboutRef.current; if (p) setAboutLong(p.scrollHeight > p.clientHeight + 2); }, [t.about]);
 
   // ---- Offer codes ----
@@ -166,10 +176,22 @@ export default function Checkout() {
   const startPayment = async () => {
     setPaying(true);
     const d = details();
-    let opened = false; // once Razorpay's window is open, it resets the button itself
+    let opened = false; // once Razorpay's window is open (or we're leaving for Cashfree), the button is reset elsewhere
     try {
+      if (gateway.provider === 'cashfree') {
+        const cf = await loadCashfree(gateway.mode);
+        if (!cf) { openSheet('fallback'); return; }
+        const order = await api.createOrder(d);
+        if (order.provider !== 'cashfree') throw new ApiError('Please refresh the page and try again.', 409);
+        // Opens Cashfree's secure payment page; afterwards Cashfree sends the customer to /payment-return
+        const result = await cf.checkout({ paymentSessionId: order.paymentSessionId, redirectTarget: '_self' });
+        if (result?.error) alert('Payment could not start: ' + (result.error.message || 'please try again.'));
+        else opened = true; // leaving for Cashfree – keep the button disabled
+        return;
+      }
       if (!(await loadRazorpay()) || !window.Razorpay) { openSheet('fallback'); return; }
       const order = await api.createOrder(d);
+      if (order.provider !== 'razorpay') throw new ApiError('Please refresh the page and try again.', 409);
       const rzp = new window.Razorpay({
         key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'APKASPA',
         description: pay === 'online' ? `${t.name} – ${t.speciality}` : `Visiting charge – ${t.name}`,
@@ -203,7 +225,7 @@ export default function Checkout() {
   };
   const onPay = () => {
     if (!validate() || !pay) return;
-    if (razorpayOn) startPayment(); else openSheet('request');
+    if (gateway.provider) startPayment(); else openSheet('request');
   };
 
   // Save a WhatsApp request to the database (admin sees it live); keep a copy on this device if offline
@@ -391,8 +413,8 @@ export default function Checkout() {
             <p className={`secure-note ${pay ? 'show' : ''}`}>
               <Icon name="shield" />
               <span>{pay === 'cod'
-                ? `The ${rupee(VISIT_CHARGE)} visiting charge is processed securely via Razorpay; the therapist collects the treatment amount in person.`
-                : 'Payments are processed securely via Razorpay.'}</span>
+                ? `The ${rupee(VISIT_CHARGE)} visiting charge is processed securely via ${gatewayName}; the therapist collects the treatment amount in person.`
+                : `Payments are processed securely via ${gatewayName}.`}</span>
             </p>
           </section>
 

@@ -36,6 +36,18 @@ const KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || ''; // Razorpay → Settings → Webhooks
 const RAZORPAY_ENABLED = Boolean(KEY_ID && KEY_SECRET);
+// Cashfree (Payment Gateway → Developers → API Keys). CASHFREE_ENV=production for live keys, otherwise sandbox.
+const CF_APP_ID = process.env.CASHFREE_APP_ID || '';
+const CF_SECRET = process.env.CASHFREE_SECRET_KEY || '';
+const CF_LIVE = String(process.env.CASHFREE_ENV || '').toLowerCase() === 'production';
+const CASHFREE_ENABLED = Boolean(CF_APP_ID && CF_SECRET);
+// Which gateway the Pay button uses. Set PAYMENT_PROVIDER=razorpay or cashfree to choose when both have keys.
+const PROVIDER = (() => {
+  const want = String(process.env.PAYMENT_PROVIDER || '').toLowerCase();
+  if (want === 'razorpay' && RAZORPAY_ENABLED) return 'razorpay';
+  if (want === 'cashfree' && CASHFREE_ENABLED) return 'cashfree';
+  return CASHFREE_ENABLED ? 'cashfree' : RAZORPAY_ENABLED ? 'razorpay' : '';
+})();
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_ENABLED = ADMIN_PASSWORD.length >= 10;
@@ -106,6 +118,7 @@ async function markPaid(orderId, paymentId, via) {
   }
   const existing = await col('bookings').findOne({ 'payment.orderId': orderId });
   if (existing) return existing; // already recorded
+  if (!orderId.startsWith('order_')) throw new Error('Booking not found for this payment.'); // only Razorpay orders can be rebuilt
   // Order isn't in the database (e.g. made before this version): rebuild it from Razorpay
   const order = await razorpay('GET', `/orders/${encodeURIComponent(orderId)}`).catch(() => ({}));
   const recovered = {
@@ -128,6 +141,63 @@ function signatureValid(orderId, paymentId, signature) {
   const a = Buffer.from(expected);
   const b = Buffer.from(String(signature || ''));
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// ---------- Cashfree API ----------
+async function cashfree(method, endpoint, body) {
+  const res = await fetch((CF_LIVE ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg') + endpoint, {
+    method,
+    headers: {
+      'Content-Type': 'application/json', 'x-api-version': '2023-08-01',
+      'x-client-id': CF_APP_ID, 'x-client-secret': CF_SECRET,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || `Cashfree error ${res.status}`);
+  return json;
+}
+
+/**
+ * Asks Cashfree for the real state of an order (never trusts the browser) and records it.
+ * Used by the return page and the webhook, so it's safe if both report the same payment.
+ * Returns 'paid', 'pending' (not finished yet) or 'failed'.
+ */
+async function confirmCashfree(orderId, via) {
+  const booking = await col('bookings').findOne({ 'payment.orderId': orderId, 'payment.gateway': 'cashfree' });
+  if (!booking) throw new Error('Booking not found for this payment.');
+  if (booking.status !== 'pending_payment') return { status: 'paid', booking };
+  const order = await cashfree('GET', `/orders/${encodeURIComponent(orderId)}`);
+  const payments = await cashfree('GET', `/orders/${encodeURIComponent(orderId)}/payments`).catch(() => []);
+  const list = (Array.isArray(payments) ? payments : [])
+    .sort((a, b) => String(b.payment_time || '').localeCompare(String(a.payment_time || '')));
+  if (order.order_status === 'PAID') {
+    if (Number(order.order_amount) !== Number(booking.payment.paidOnline)) {
+      await logEvent('payment_failed', `Amount mismatch on ${booking.bookingId}: Cashfree ₹${order.order_amount}, booking ₹${booking.payment.paidOnline} – check Cashfree`, { bookingId: booking.bookingId });
+      throw new Error('Payment amount did not match. Please contact us.');
+    }
+    const ok = list.find((p) => p.payment_status === 'SUCCESS');
+    return { status: 'paid', booking: await markPaid(orderId, String(ok?.cf_payment_id || order.cf_order_id || ''), via) };
+  }
+  // Not paid: if the latest attempt failed, note it once in the admin's activity feed
+  const last = list[0];
+  const failed = last && ['FAILED', 'USER_DROPPED', 'CANCELLED'].includes(last.payment_status) ? last : null;
+  if (failed) {
+    const pid = String(failed.cf_payment_id);
+    const r = await col('bookings').updateOne({ _id: booking._id, 'payment.lastFailedId': { $ne: pid } }, { $set: { 'payment.lastFailedId': pid } });
+    if (r.modifiedCount) {
+      await logEvent('payment_failed', `Payment failed for ${booking.customer?.name || 'a customer'} (${booking.bookingId}): ${failed.payment_message || failed.payment_status}`, { bookingId: booking.bookingId });
+    }
+  }
+  const status = order.order_status === 'ACTIVE' && !failed ? 'pending' : 'failed';
+  return { status, booking, message: failed?.payment_message || '' };
+}
+
+// Address customers return to after paying on Cashfree's page (taken from the request, so it works on any domain)
+function siteOrigin(req) {
+  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
+  const proto = String(req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http')).split(',')[0].trim();
+  return `${proto}://${req.headers['x-forwarded-host'] || req.headers.host}`;
 }
 
 // ---------- Small helpers ----------
@@ -412,7 +482,10 @@ async function handle(req, res) {
   const { pathname } = url;
 
   if (pathname === '/api/config' && req.method === 'GET') {
-    return sendJSON(res, 200, { razorpay: RAZORPAY_ENABLED, keyId: RAZORPAY_ENABLED ? KEY_ID : null });
+    return sendJSON(res, 200, {
+      provider: PROVIDER || null, razorpay: PROVIDER === 'razorpay', keyId: PROVIDER === 'razorpay' ? KEY_ID : null,
+      cashfreeMode: PROVIDER === 'cashfree' ? (CF_LIVE ? 'production' : 'sandbox') : null,
+    });
   }
 
   // ===== Customer accounts =====
@@ -511,13 +584,56 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/create-order' && req.method === 'POST') {
-    if (!RAZORPAY_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
+    if (!PROVIDER) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     const body = await readBody(req);
     const q = quote(body);
     const customer = cleanCustomer(body.customer);
     const problem = customerError(customer);
     if (problem) return sendJSON(res, 400, { error: problem });
     const bookingId = newBookingId('APK');
+    const user = await currentUser(req);
+    const newBooking = (orderId, gateway) => ({
+      bookingId, source: 'online', status: 'pending_payment', createdAt: new Date(),
+      deviceHash: deviceHashOf(body.deviceId), userId: user ? String(user._id) : '',
+      therapist: { type: clip(body.type, 20), id: Number(body.id), name: q.therapist.name, speciality: q.therapist.speciality },
+      payment: {
+        method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: q.payNow,
+        cashOnService: q.cashLater, total: q.payNow + q.cashLater, orderId, gateway,
+        visitCharge: body.pay === 'cod' ? q.visitCharge : 0,
+      },
+      customer,
+    });
+
+    if (PROVIDER === 'cashfree') {
+      // Save first (order id = booking id), so the webhook can always find it
+      await col('bookings').insertOne(newBooking(bookingId, 'cashfree'));
+      let order;
+      try {
+        order = await cashfree('POST', '/orders', {
+          order_id: bookingId,
+          order_amount: q.payNow,
+          order_currency: 'INR',
+          customer_details: {
+            customer_id: user ? String(user._id) : `guest_${customer.mobile}`,
+            customer_name: customer.name, customer_phone: customer.mobile,
+            ...(user?.email ? { customer_email: user.email } : {}),
+          },
+          order_meta: { return_url: `${siteOrigin(req)}/payment-return?order_id={order_id}` },
+          order_note: `${body.pay === 'online' ? 'Treatment' : 'Visiting charge'} – ${q.therapist.name}`.slice(0, 200),
+          order_tags: { therapist: q.therapist.name.slice(0, 50), slot: `${customer.date} ${customer.time}` },
+        });
+      } catch (e) {
+        await col('bookings').deleteOne({ bookingId, status: 'pending_payment' });
+        console.error('Cashfree order failed:', e.message);
+        return sendJSON(res, 502, { error: 'Online payment is not available right now.', code: 'payment_unavailable' });
+      }
+      await logEvent('payment_started', `${customer.name} opened payment for ₹${q.payNow} (${q.therapist.name})`, { bookingId });
+      return sendJSON(res, 200, {
+        provider: 'cashfree', bookingId, orderId: bookingId, amount: q.payNow,
+        paymentSessionId: order.payment_session_id, mode: CF_LIVE ? 'production' : 'sandbox',
+      });
+    }
+
     let order;
     try {
       order = await razorpay('POST', '/orders', {
@@ -534,20 +650,45 @@ async function handle(req, res) {
       console.error('Razorpay order failed:', e.message);
       return sendJSON(res, 502, { error: 'Online payment is not available right now.', code: 'payment_unavailable' });
     }
-    const user = await currentUser(req);
-    await col('bookings').insertOne({
-      bookingId, source: 'online', status: 'pending_payment', createdAt: new Date(),
-      deviceHash: deviceHashOf(body.deviceId), userId: user ? String(user._id) : '',
-      therapist: { type: clip(body.type, 20), id: Number(body.id), name: q.therapist.name, speciality: q.therapist.speciality },
-      payment: {
-        method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: q.payNow,
-        cashOnService: q.cashLater, total: q.payNow + q.cashLater, orderId: order.id,
-        visitCharge: body.pay === 'cod' ? q.visitCharge : 0,
-      },
-      customer,
-    });
+    await col('bookings').insertOne(newBooking(order.id, 'razorpay'));
     await logEvent('payment_started', `${customer.name} opened payment for ₹${q.payNow} (${q.therapist.name})`, { bookingId });
-    return sendJSON(res, 200, { orderId: order.id, amount: order.amount, currency: order.currency, keyId: KEY_ID, bookingId });
+    return sendJSON(res, 200, { provider: 'razorpay', orderId: order.id, amount: order.amount, currency: order.currency, keyId: KEY_ID, bookingId });
+  }
+
+  // Cashfree: the checkout page (or the return page after a redirect) asks whether the order is paid.
+  // The answer comes from Cashfree's servers, not from the browser.
+  if (pathname === '/api/cashfree-verify' && req.method === 'POST') {
+    if (!CASHFREE_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
+    const orderId = clip((await readBody(req)).orderId, 60);
+    if (!/^[A-Za-z0-9_-]{3,50}$/.test(orderId)) return sendJSON(res, 400, { error: 'Unknown order.' });
+    const r = await confirmCashfree(orderId, 'checkout');
+    const b = r.booking;
+    return sendJSON(res, 200, {
+      status: r.status, message: r.message || '', bookingId: b.bookingId, paymentId: b.payment?.paymentId || '',
+      amount: b.payment?.paidOnline, method: b.payment?.method, therapist: b.therapist?.name,
+      slot: `${b.customer?.date || ''} ${b.customer?.time || ''}`.trim(),
+    });
+  }
+
+  // Cashfree webhook – records payments even if the customer never comes back to the site.
+  // Cashfree → Developers → Webhooks → add https://YOUR-SITE/api/cashfree-webhook (Payment events).
+  if (pathname === '/api/cashfree-webhook' && req.method === 'POST') {
+    if (!CASHFREE_ENABLED) return sendJSON(res, 503, { error: 'Cashfree is not set up.' });
+    const raw = await readRawBody(req, 1e6);
+    if (!raw) return sendJSON(res, 500, { error: 'Webhook body unavailable. On Vercel, add the environment variable NODEJS_HELPERS=0 and redeploy.' });
+    const ts = String(req.headers['x-webhook-timestamp'] || '');
+    const given = String(req.headers['x-webhook-signature'] || '');
+    const expected = crypto.createHmac('sha256', CF_SECRET).update(ts + raw.toString()).digest('base64');
+    if (!ts || expected.length !== given.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(given))) {
+      return sendJSON(res, 400, { error: 'Invalid webhook signature.' });
+    }
+    let evt;
+    try { evt = JSON.parse(raw.toString()); } catch (e) { return sendJSON(res, 400, { error: 'Invalid JSON' }); }
+    const orderId = String(evt.data?.order?.order_id || '');
+    if (/PAYMENT/.test(String(evt.type || '')) && orderId) {
+      await confirmCashfree(orderId, 'webhook').catch((e) => console.error('Cashfree webhook:', orderId, e.message));
+    }
+    return sendJSON(res, 200, { ok: true }); // 200 for every genuine event so Cashfree doesn't retry
   }
 
   if (pathname === '/api/verify-payment' && req.method === 'POST') {
@@ -783,7 +924,7 @@ async function requestHandler(req, res) {
       settings: {
         MONGODB_URI: seen('MONGODB_URI'), SESSION_SECRET: seen('SESSION_SECRET'),
         ADMIN_USERNAME: seen('ADMIN_USERNAME'), ADMIN_PASSWORD: seen('ADMIN_PASSWORD'),
-        ADMIN_PASSWORD_long_enough: ADMIN_ENABLED, RAZORPAY: RAZORPAY_ENABLED,
+        ADMIN_PASSWORD_long_enough: ADMIN_ENABLED, RAZORPAY: RAZORPAY_ENABLED, CASHFREE: CASHFREE_ENABLED, paymentGateway: PROVIDER || 'none (WhatsApp only)',
       },
       liveUpdates: database === 'connected' ? (store.supportsChangeStreams() ? 'change streams' : 'this server') : 'unknown',
     });
@@ -817,8 +958,10 @@ if (require.main === module) (async () => {
     console.log(ADMIN_ENABLED
       ? `Admin dashboard: http://localhost:${PORT}/admin  (username "${ADMIN_USERNAME}")`
       : 'Admin dashboard: OFF – set ADMIN_PASSWORD (10+ characters) in .env to turn it on');
-    console.log(RAZORPAY_ENABLED
-      ? `Razorpay: ON (${KEY_ID.startsWith('rzp_test_') ? 'TEST mode' : 'LIVE mode'})`
-      : 'Razorpay: OFF – add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to .env (bookings fall back to WhatsApp)');
+    console.log(PROVIDER === 'cashfree'
+      ? `Payments: Cashfree (${CF_LIVE ? 'LIVE' : 'SANDBOX test'} mode)`
+      : PROVIDER === 'razorpay'
+        ? `Payments: Razorpay (${KEY_ID.startsWith('rzp_test_') ? 'TEST mode' : 'LIVE mode'})`
+        : 'Payments: OFF – add CASHFREE_APP_ID/CASHFREE_SECRET_KEY (or Razorpay keys) to .env (bookings fall back to WhatsApp)');
   });
 })();

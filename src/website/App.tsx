@@ -11,6 +11,7 @@ import Checkout from './pages/Checkout';
 import Offers from './pages/Offers';
 import Bookings from './pages/Bookings';
 import { Login, Signup } from './pages/Auth';
+import PaymentReturn from './pages/PaymentReturn';
 
 /** Which shared parts a page shows (same as the original site). */
 function Page({ header = true, footer = false, nav = true, children }: { header?: boolean; footer?: boolean; nav?: boolean; children: ReactNode }) {
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/bookings" element={<Page><Bookings /></Page>} />
             <Route path="/login" element={<Page><Login /></Page>} />
             <Route path="/signup" element={<Page><Signup /></Page>} />
+            <Route path="/payment-return" element={<Page><PaymentReturn /></Page>} />
 
             <Route path="/index.html" element={<LegacyRedirect to="/" />} />
             <Route path="/book-now.html" element={<LegacyRedirect to="/book-now" />} />

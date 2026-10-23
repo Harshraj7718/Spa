@@ -34,7 +34,7 @@ async function request<T>(path: string, body?: unknown, init: RequestInit = {}):
 }
 
 export const api = {
-  config: () => request<{ razorpay: boolean; keyId: string | null }>('/api/config'),
+  config: () => request<{ provider: 'cashfree' | 'razorpay' | null; razorpay: boolean; keyId: string | null; cashfreeMode: CashfreeMode | null }>('/api/config'),
   me: () => request<{ user: User | null }>('/api/me'),
   login: (email: string, password: string) => request<{ user: User }>('/api/login', { email, password }),
   signup: (b: { name: string; email: string; mobile: string; password: string }) => request<{ user: User }>('/api/signup', b),
@@ -42,8 +42,8 @@ export const api = {
   subscribe: (email: string) => request<{ ok: true; already: boolean }>('/api/subscribe', { email }),
   myBookings: (deviceId: string) => request<{ bookings: CustomerBooking[] }>('/api/my-bookings', { deviceId }),
   bookingRequest: (d: BookingDetails) => request<{ bookingId: string }>('/api/booking-request', d, { keepalive: true }),
-  createOrder: (d: BookingDetails) =>
-    request<{ orderId: string; amount: number; currency: string; keyId: string; bookingId: string }>('/api/create-order', d),
+  createOrder: (d: BookingDetails) => request<RazorpayOrder | CashfreeOrder>('/api/create-order', d),
+  cashfreeVerify: (orderId: string) => request<CashfreeStatus>('/api/cashfree-verify', { orderId }),
   verifyPayment: (r: RazorpayResponse) => request<{ bookingId: string }>('/api/verify-payment', r),
 };
 
@@ -51,4 +51,18 @@ export interface RazorpayResponse {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
+}
+
+export type CashfreeMode = 'sandbox' | 'production';
+export interface RazorpayOrder { provider: 'razorpay'; orderId: string; amount: number; currency: string; keyId: string; bookingId: string }
+export interface CashfreeOrder { provider: 'cashfree'; orderId: string; amount: number; bookingId: string; paymentSessionId: string; mode: CashfreeMode }
+export interface CashfreeStatus {
+  status: 'paid' | 'pending' | 'failed';
+  message: string;
+  bookingId: string;
+  paymentId: string;
+  amount?: number;
+  method?: string;
+  therapist?: string;
+  slot?: string;
 }
