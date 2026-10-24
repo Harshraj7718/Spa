@@ -2,6 +2,14 @@
   "_readme": "Starting copy only: copied into MongoDB the first time the server runs. After that, edit therapists and offers in the admin dashboard (Therapists / Offers tabs).",
   "visitCharge": 149,
   "businessWhatsapp": "919244092230",
+  "contact": {
+    "whatsapp": "919244092230",
+    "phone": "919244092230",
+    "instagram": "",
+    "email": "",
+    "address": "Vijay Nagar, Indore",
+    "hours": "Daily, 10 AM - 10 PM"
+  },
   "therapistDefaults": {
     "experience": "2+ years",
     "specializes": "Relaxation",

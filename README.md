@@ -1,14 +1,22 @@
-# APKASPA – Spa Website
+# AAPNA SPA – Spa Website
 
 The website and the admin dashboard are built with **React + TypeScript** (bundled by **Vite**).
-A small **Node.js** server (`server.js`) serves them, stores everything in **MongoDB**, and takes payments with **Cashfree** (Razorpay also supported).
+A small **Node.js** server (in the **`backend/`** folder) serves them, stores everything in **MongoDB**, and takes payments with **Cashfree** (Razorpay also supported).
+
+## Guides for each part
+
+| Part | Folder | Guide |
+|---|---|---|
+| Website (frontend) | `src/website/` | [src/website/README.md](src/website/README.md) |
+| Admin dashboard (frontend) | `src/admin/` | [src/admin/README.md](src/admin/README.md) |
+| Backend for both (Node + MongoDB, all `/api` addresses) | `backend/` | [backend/README.md](backend/README.md) |
 
 ## Quick start
 
 ```
 npm install          # once
 npm run build        # builds the website + admin into dist/
-node server.js       # then open http://localhost:5500  (admin: http://localhost:5500/admin)
+npm start            # starts backend/server.js – open http://localhost:5500  (admin: http://localhost:5500/admin)
 ```
 
 Run `npm run build` again after changing anything in `src/`, `shared/` or `public/`. The server reads `dist/`.
@@ -16,7 +24,7 @@ Run `npm run build` again after changing anything in `src/`, `shared/` or `publi
 ### While developing (live reload)
 Run these in two terminals:
 ```
-node server.js       # API + database on http://localhost:5500
+npm start            # backend: API + database on http://localhost:5500
 npm run dev          # React with instant reload on http://localhost:5173  (admin: /admin/)
 ```
 `npm run dev` forwards `/api` calls to the server, so logins, bookings and the live admin feed all work.
@@ -29,16 +37,17 @@ spa/
 ├── index.html              ← entry page for the website
 ├── admin/index.html        ← entry page for the admin dashboard
 ├── src/
-│   ├── website/            ← website (React + TypeScript)
+│   ├── website/            ← WEBSITE frontend (React + TypeScript) – see its README.md
 │   │   ├── App.tsx         ← pages & addresses (routes)
 │   │   ├── pages/          ← Home, BookNow, Checkout, Offers, Bookings, Auth (login + sign-up)
 │   │   ├── components/     ← Header (menu, notifications, city), BottomNav, Footer, Photo, MapPicker…
 │   │   └── lib/            ← server calls, login state, browser storage, helpers
-│   ├── admin/              ← admin dashboard (React + TypeScript): bookings, analytics charts, live feed
+│   ├── admin/              ← ADMIN frontend (React + TypeScript) – see its README.md
 │   └── styles/             ← the stylesheets (same design as before)
-├── shared/catalog.json     ← therapists, prices, offers, visiting charge (used by website AND server)
+├── shared/catalog.json     ← starting copy of therapists & offers (edit them in the admin)
 ├── public/assets/          ← your photos & video (copied into the build as /assets/…)
-├── server.js, db.js        ← Node server + MongoDB
+├── backend/                ← BACKEND: server.js (all /api routes, payments, admin API) + db.js (MongoDB)
+├── api/index.js            ← tiny Vercel entry that loads backend/server.js (Vercel needs it here)
 ├── dist/                   ← the built site (created by npm run build – don't edit)
 └── _old_static/            ← the previous plain-HTML version, kept for reference (safe to delete)
 ```
@@ -67,7 +76,7 @@ public/assets/
 ├── videos/hero.mp4                  ← hero background video (always silent)
 └── images/
     ├── hero-poster.jpg              ← still shown while the video loads
-    ├── logo.png                     ← logo above "APKASPA" (a gold lotus is drawn until it exists)
+    ├── logo.png                     ← optional photo logo; until it exists the built-in AAPNA SPA lotus logo is shown
     ├── avatar.jpg                   ← round picture, top-left of the header
     ├── home-service.jpg, hotel-service.jpg, therapist.jpg      ← home page service cards
     ├── full-body.jpg, head-neck-shoulder.jpg, foot-reflexology.jpg  ← massage cards
@@ -109,14 +118,22 @@ The visiting charge (`visitCharge`) and WhatsApp number (`businessWhatsapp`) are
 
 Other settings: time-slot hours at the top of `src/website/pages/Checkout.tsx`, menu links and cities in `src/website/components/Header.tsx`, the map's starting point in `src/website/components/MapPicker.tsx`.
 
+## Customer's city (detected at login / sign-up)
+
+When a customer opens the login or sign-up page, the browser asks to share their location. If they allow it,
+the server looks up the city on OpenStreetMap (only the city name is kept – never the exact location) and shows
+"Your city: Pune". The city is saved on their account, appears in the header's city pill and in Admin → Customers.
+If they block location, they can still log in normally (a *Try again* button is shown). Browsers only allow
+location on **https://** sites (and on localhost).
+
 ## Online payments (Cashfree)
 
 1. Put your keys in `.env` (see `.env.example`): `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV=sandbox`.
    Get them from the Cashfree Merchant Dashboard → **Developers → API Keys** (start with the **Test** keys).
-2. Restart `node server.js` — it shows `Payments: Cashfree (SANDBOX test mode)`.
+2. Restart the server (`npm start`) — it shows `Payments: Cashfree (SANDBOX test mode)`.
 
 How it works:
-- **Pay Online** charges the full treatment amount (minus any offer); **Cash on Delivery** charges only the ₹149 visiting charge online.
+- **Pay Online** charges the treatment amount (minus any offer) **plus the ₹149 visiting / travel charge**; **Cash on Delivery** charges only the ₹149 visiting charge online and the treatment is paid in cash.
   The server calculates the amount itself from `shared/catalog.json` – a customer can't change it.
 - The button saves the booking as *Awaiting payment* and sends the customer to Cashfree's secure page (UPI, cards, netbanking, wallets).
 - Afterwards Cashfree returns them to `/payment-return`. That page asks the server, the server asks **Cashfree** whether the order is
@@ -162,20 +179,22 @@ Everything is stored in the `apkaspa` database:
 - **Live** updates with no refresh (green dot), optional sound for new bookings/payments.
 - **Bookings:** filters, search, Call/WhatsApp/map links, change status (customers see it on My Bookings).
 - **Therapists** and **Offers:** edit what the website shows (see above).
+- **Contact:** WhatsApp, phone, Instagram, email, address and opening hours shown on the website (home contact cards, footer, booking pages, help links). Leave a box empty to hide it.
+- **Customers** also shows each customer's **city**, detected from their location when they log in or sign up.
 - **Analytics:** 7/30/90-day tiles and charts, each with a Table view.
 - **Customers**, **Subscribers** (copy all emails) and **Activity**.
 
 ### MongoDB Atlas
 1. Atlas → **Security → Network Access**: add your IP (and later your hosting server's).
 2. In `.env`, set `MONGODB_URI` to your connection string with the password filled in (no `< >`), keeping `/apkaspa` after `.mongodb.net`.
-3. `node server.js` should say `MongoDB: connected (database "apkaspa")`.
+3. `npm start` should say `MongoDB: connected (database "apkaspa")`.
 
 If your network's DNS can't look up `mongodb+srv://` addresses (`querySrv ECONNREFUSED`), the server retries with public DNS (8.8.8.8 / 1.1.1.1) automatically; change them with `DNS_SERVERS` in `.env`.
 
 ## Deploying to Vercel
 
 The project is ready for Vercel: the website and admin are served as static files from `dist/`, and every `/api/…`
-request runs `api/index.js` (the same code as `server.js`) as a serverless function. Settings are in `vercel.json`;
+request runs `api/index.js` (which loads `backend/server.js`) as a serverless function. Settings are in `vercel.json`;
 `.vercelignore` keeps `.env`, `data/` and `_old_static/` from ever being uploaded.
 
 1. **Atlas → Security → Network Access → Add IP Address → Allow access from anywhere (`0.0.0.0/0`).**
@@ -201,6 +220,6 @@ How it behaves on Vercel:
 
 ## Hosting it online (any Node.js host)
 Use a host that runs Node.js (Render, Railway, a VPS) with HTTPS:
-1. `npm install` → `npm run build` → `node server.js` (or `npm start`).
+1. `npm install` → `npm run build` → `npm start` (runs `node backend/server.js`).
 2. Set the values from `.env` as environment variables there, including a `SESSION_SECRET`.
 3. Use MongoDB Atlas for the database, and back it up regularly.

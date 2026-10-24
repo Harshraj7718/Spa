@@ -63,6 +63,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   color: var(--gold);
 }
 .brand-icon { height: 18px; }
+.brand span { white-space: nowrap; }
 .topbar-actions { display: flex; align-items: center; gap: 6px; }
 .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; }
 .icon-btn:hover { background: rgba(255,255,255,.08); }
@@ -209,10 +210,12 @@ h2.light span { color: var(--green-light); }
 .f-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: #fff; }
 .f-brand b { display: block; letter-spacing: 2px; }
 .f-brand small { font-size: 8px; letter-spacing: 2px; color: rgba(255,255,255,.5); }
-.f-logo { width: 40px; height: 24px; fill: #fff; stroke: none; }
+.f-logo { width: 40px; height: 24px; color: var(--gold); flex-shrink: 0; }
 .f-social { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.08); display: grid !important; place-items: center; margin-top: 16px; }
 .f-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .f-row svg { width: 15px; height: 15px; }
+.f-socials { display: flex; gap: 8px; }
+a.f-row { color: inherit; text-decoration: none; }
 .f-small { font-size: 12px; margin: 18px 0 10px; }
 .newsletter { display: flex; background: rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; }
 .newsletter input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 10px 12px; color: #fff; font: inherit; font-size: 13px; outline: none; }
@@ -273,7 +276,7 @@ h2.light span { color: var(--green-light); }
 }
 
 /* =====================================================================
-   PHONE LAYOUT (≤ 640px) – matches the APKASPA mobile app design
+   PHONE LAYOUT (≤ 640px) – matches the AAPNA SPA mobile app design
    Tablet and desktop are unchanged.
    ===================================================================== */
 @media (min-width: 641px) { .m-only { display: none !important; } }
@@ -361,7 +364,7 @@ h2.light span { color: var(--green-light); }
   body { padding-bottom: 120px; }
 }
 
-/* ---- Phone sizes measured from the APKASPA app screenshot (iPhone, 390pt wide) ---- */
+/* ---- Phone sizes measured from the AAPNA SPA app screenshot (iPhone, 390pt wide) ---- */
 @media (max-width: 640px) {
   .hero-wrap { padding-top: 22px; }
   .hero { border-radius: 16px; }

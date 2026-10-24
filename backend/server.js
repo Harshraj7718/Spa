@@ -1,12 +1,12 @@
 // ============================================================
-// APKASPA website server
+// AAPNA SPA website server
 // - Serves the React website and admin dashboard built into dist/ (npm run build)
 // - Stores everything in MongoDB (see db.js): accounts, bookings, newsletter, activity
 // - Creates Razorpay orders (amount is calculated here, never trusted from the browser)
 // - Verifies Razorpay payment signatures
 // - Pushes every new event to open admin dashboards in real time (Server-Sent Events)
 //
-// Run:   node server.js        (then open http://localhost:5500 and http://localhost:5500/admin)
+// Run:   node backend/server.js        (then open http://localhost:5500 and http://localhost:5500/admin)
 // Setup: copy .env.example to .env (MongoDB address, admin password, Razorpay keys)
 // ============================================================
 const http = require('http');
@@ -15,7 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 const store = require('./db');
 
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, '..'); // the project folder (backend/ lives inside it)
 const DATA_DIR = path.join(ROOT, 'data');
 const DIST = path.join(ROOT, 'dist'); // built React apps (npm run build)
 const CATALOG_FILE = path.join(ROOT, 'shared', 'catalog.json'); // therapists, offers, prices – shared with the website
@@ -69,7 +69,7 @@ async function readCatalog() {
   const seed = {
     _id: CATALOG_ID, visitCharge: c.visitCharge, businessWhatsapp: c.businessWhatsapp, therapistDefaults: c.therapistDefaults,
     therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) }))])),
-    offers: c.offers, updatedAt: new Date(),
+    offers: c.offers, contact: c.contact, updatedAt: new Date(),
   };
   try { await col('settings').insertOne(seed); } catch (e) { if (e.code !== 11000) throw e; } // another copy seeded it first
   return col('settings').findOne({ _id: CATALOG_ID });
@@ -101,7 +101,8 @@ async function loadCatalog() {
 async function publicCatalog() {
   const c = await readCatalog();
   return {
-    visitCharge: c.visitCharge, businessWhatsapp: c.businessWhatsapp, therapistDefaults: c.therapistDefaults,
+    visitCharge: c.visitCharge, businessWhatsapp: contactOf(c).whatsapp || c.businessWhatsapp, contact: contactOf(c),
+    therapistDefaults: c.therapistDefaults,
     therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists?.[ty] || [])
       .map((t, i) => ({ ...t, key: keyOf(t, i) })).filter((t) => !t.hidden)])),
     offers: (c.offers || []).filter((o) => !o.disabled),
@@ -138,6 +139,43 @@ const text = (v, max, label, required = false) => {
   if (s.length > max) throw new Error(`${label} must be at most ${max} characters.`);
   return s;
 };
+
+/**
+ * Contact details shown on the website (WhatsApp, phone, Instagram, email, address, hours).
+ * Edited in Admin → Contact. Anything left empty is hidden on the website.
+ */
+const DEFAULT_CONTACT = { whatsapp: '', phone: '', instagram: '', email: '', address: '', hours: '' };
+function contactOf(c) {
+  // Not saved from the admin yet: use the starting values in shared/catalog.json
+  let start = {};
+  if (!c.contact) { try { start = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8')).contact || {}; } catch (e) { /* ignore */ } }
+  return { ...DEFAULT_CONTACT, whatsapp: c.businessWhatsapp || '', phone: c.businessWhatsapp || '', ...start, ...(c.contact || {}) };
+}
+function cleanContact(input = {}) {
+  // Indian numbers: 10 digits get the 91 country code; other numbers keep their own code
+  const phoneNum = (v, label) => {
+    let d = String(v || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+    if (d.length === 10) d = '91' + d;
+    if (d.length < 11 || d.length > 15) throw new Error(`${label}: enter a 10-digit mobile number (or one with country code).`);
+    return d;
+  };
+  let insta = String(input.instagram || '').trim();
+  const m = insta.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+  insta = (m ? m[1] : insta).replace(/^@/, '').replace(/\/+$/, '');
+  if (insta && !/^[A-Za-z0-9._]{1,30}$/.test(insta)) throw new Error('Instagram: enter the username (like aapnaspa) or the profile link.');
+  const email = String(input.email || '').trim().toLowerCase();
+  if (email && !EMAIL_RE.test(email)) throw new Error('Email: enter a valid email address.');
+  return {
+    whatsapp: phoneNum(input.whatsapp, 'WhatsApp'),
+    phone: phoneNum(input.phone, 'Phone'),
+    instagram: insta,
+    email,
+    address: text(input.address, 120, 'Address'),
+    hours: text(input.hours, 60, 'Opening hours'),
+  };
+}
 
 function cleanTherapists(input) {
   const out = {};
@@ -200,7 +238,8 @@ async function quote({ type, id, pay, code }) {
   const cleanCode = String(code || '').trim().toUpperCase();
   const discount = cat.discountFor(cleanCode, t.price);
   const treatment = Math.max(t.price - discount, 0);
-  const payNow = pay === 'online' ? treatment : cat.VISIT_CHARGE;
+  // Pay Online: treatment + visiting/travel charge now. Cash on Delivery: visiting charge now, treatment in cash.
+  const payNow = pay === 'online' ? treatment + cat.VISIT_CHARGE : cat.VISIT_CHARGE;
   const cashLater = pay === 'online' ? 0 : treatment;
   return { therapist: t, price: t.price, discount, code: discount ? cleanCode : '', treatment, payNow, cashLater, visitCharge: cat.VISIT_CHARGE };
 }
@@ -444,7 +483,11 @@ async function currentUser(req) {
   return _id ? col('users').findOne({ _id }) : col('users').findOne({ legacyId: id });
 }
 const userCookie = (req, user) => cookie(req, COOKIE, makeToken(String(user._id), SESSION_DAYS * 864e5, 'user'), SESSION_DAYS * 86400);
-const publicUser = (u) => ({ name: u.name, email: u.email, mobile: u.mobile });
+const publicUser = (u) => ({ name: u.name, email: u.email, mobile: u.mobile, city: u.city || '' });
+// A city name from the browser's location lookup: letters, spaces, dots and dashes only
+const cleanCity = (v) => { const c = String(v || '').trim().replace(/\s+/g, ' ').slice(0, 60); return /^[\p{L}][\p{L} .'-]*$/u.test(c) ? c : ''; };
+const locateCache = new Map(); // "lat,lon" (rounded) → { city, state }
+const locateHits = new Map();  // ip → recent lookup times
 
 const isAdmin = (req) => ADMIN_ENABLED && readToken(req, ADMIN_COOKIE, 'admin') === 'admin';
 
@@ -585,6 +628,14 @@ function bookingForAdmin(b) {
   return { ...rest, _id: String(b._id), createdAt: iso(b.createdAt), paidAt: iso(b.paidAt), updatedAt: iso(b.updatedAt) };
 }
 
+// When a booking's session starts ("2026-10-24" + "3:00 PM", Indian time), in ms
+function slotStart(b) {
+  const m = String(b.customer?.time || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const h = m ? (Number(m[1]) % 12) + (m[3].toUpperCase() === 'PM' ? 12 : 0) : 23;
+  const t = Date.parse(`${b.customer?.date}T${String(h).padStart(2, '0')}:${m ? m[2] : '59'}:00+05:30`);
+  return Number.isNaN(t) ? 0 : t;
+}
+
 // Today's date in India, as YYYY-MM-DD, and midnight IST as a Date
 function istToday() {
   const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
@@ -610,6 +661,40 @@ async function handle(req, res) {
     return sendJSON(res, 200, await publicCatalog());
   }
 
+  // City from the customer's location (they allow it in the browser on the login / sign-up page).
+  // Looks the coordinates up on OpenStreetMap; the coordinates themselves are not stored.
+  if (pathname === '/api/locate' && req.method === 'GET') {
+    const lat = Number(url.searchParams.get('lat'));
+    const lon = Number(url.searchParams.get('lon'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      return sendJSON(res, 400, { error: 'Invalid location.' });
+    }
+    const ipKey = `locate|${clientIp(req)}`;
+    const hits = (locateHits.get(ipKey) || []).filter((t) => t > Date.now() - 60e3);
+    if (hits.length >= 10) return sendJSON(res, 429, { error: 'Too many location lookups. Please try again in a minute.' });
+    locateHits.set(ipKey, [...hits, Date.now()]);
+    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`; // ~1 km – nearby customers share one lookup
+    if (!locateCache.has(cacheKey)) {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=${lat}&lon=${lon}`, {
+          headers: { 'User-Agent': 'AAPNA-SPA-website/1.0 (city lookup at login)' },
+          signal: AbortSignal.timeout(8000),
+        });
+        const j = await r.json();
+        const a = j.address || {};
+        // City if there is one, else the district (e.g. Talegaon → Pune District → Pune)
+        const district = String(a.state_district || a.county || '').replace(/\s+(District|Subdistrict|Tahsil|Tehsil)$/i, '');
+        const city = cleanCity(a.city || a.town || district || a.village || '');
+        locateCache.set(cacheKey, { city, state: cleanCity(a.state || '') });
+        if (locateCache.size > 2000) locateCache.delete(locateCache.keys().next().value);
+      } catch (e) {
+        console.error('City lookup failed:', e.message);
+        return sendJSON(res, 502, { error: 'Could not look up your city right now.' });
+      }
+    }
+    return sendJSON(res, 200, locateCache.get(cacheKey));
+  }
+
   // ===== Customer accounts =====
   if (pathname === '/api/signup' && req.method === 'POST') {
     const body = await readBody(req);
@@ -621,7 +706,8 @@ async function handle(req, res) {
     if (!EMAIL_RE.test(email)) return sendJSON(res, 400, { error: 'Please enter a valid email address.', field: 'email' });
     if (mobile && !MOBILE_RE.test(mobile)) return sendJSON(res, 400, { error: 'Enter a valid 10-digit mobile number.', field: 'mobile' });
     if (password.length < 8 || password.length > 128) return sendJSON(res, 400, { error: 'Password must be at least 8 characters.', field: 'password' });
-    const user = { name, email, mobile, password: hashPassword(password), createdAt: new Date(), lastLoginAt: new Date() };
+    const city = cleanCity(body.city);
+    const user = { name, email, mobile, password: hashPassword(password), createdAt: new Date(), lastLoginAt: new Date(), ...(city ? { city, cityAt: new Date() } : {}) };
     try {
       const r = await col('users').insertOne(user);
       user._id = r.insertedId;
@@ -629,7 +715,7 @@ async function handle(req, res) {
       if (e.code === 11000) return sendJSON(res, 409, { error: 'An account with this email already exists. Please log in.', field: 'email' });
       throw e;
     }
-    await logEvent('signup', `New customer account: ${name}`, { email });
+    await logEvent('signup', `New customer account: ${name}${city ? ` (${city})` : ''}`, { email });
     return sendJSON(res, 201, { ok: true, user: publicUser(user) }, { 'Set-Cookie': userCookie(req, user) });
   }
 
@@ -643,7 +729,9 @@ async function handle(req, res) {
     const ok = passwordMatches(password, user ? user.password : DUMMY_HASH) && !!user;
     if (!ok) { recordFailure(key); return sendJSON(res, 401, { error: 'Incorrect email or password.' }); }
     failedLogins.delete(key);
-    await col('users').updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+    const city = cleanCity(body.city);
+    await col('users').updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date(), ...(city ? { city, cityAt: new Date() } : {}) } });
+    if (city) user.city = city;
     return sendJSON(res, 200, { ok: true, user: publicUser(user) }, { 'Set-Cookie': userCookie(req, user) });
   }
 
@@ -680,14 +768,80 @@ async function handle(req, res) {
       therapist: { type: clip(body.type, 20), id: clip(body.id, 40), name: q.therapist.name, speciality: q.therapist.speciality },
       payment: {
         method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: 0,
-        total: q.treatment + (body.pay === 'cod' ? q.visitCharge : 0), cashOnService: q.cashLater,
-        visitCharge: body.pay === 'cod' ? q.visitCharge : 0,
+        total: q.treatment + q.visitCharge, cashOnService: q.cashLater,
+        visitCharge: q.visitCharge,
       },
       customer,
     };
     await col('bookings').insertOne(booking);
     await logEvent('booking_request', `New WhatsApp booking request from ${customer.name} for ${q.therapist.name}`, { bookingId: booking.bookingId });
     return sendJSON(res, 201, { ok: true, bookingId: booking.bookingId });
+  }
+
+  // ===== Notifications for logged-in customers: bookings still waiting for payment =====
+  if (pathname === '/api/notifications' && req.method === 'GET') {
+    const user = await currentUser(req);
+    if (!user) return sendJSON(res, 200, { notifications: [] });
+    const mine = await col('bookings')
+      .find({ userId: String(user._id), 'customer.date': { $gte: istToday().ymd } })
+      .sort({ createdAt: -1 }).limit(100).toArray();
+    // A slot the customer already has a paid/confirmed booking for doesn't need a reminder
+    const slotKey = (b) => `${b.therapist?.name}|${b.customer?.date}|${b.customer?.time}`;
+    const covered = new Set(mine.filter((b) => b.status !== 'pending_payment' && b.status !== 'cancelled').map(slotKey));
+    const seen = new Set();
+    const notifications = [];
+    for (const b of mine) {
+      if (b.status !== 'pending_payment' || b.payment?.gateway !== 'cashfree') continue;
+      if (slotStart(b) < Date.now()) continue; // the time has passed
+      const k = slotKey(b);
+      if (covered.has(k) || seen.has(k)) continue; // paid already, or an older attempt for the same slot
+      seen.add(k);
+      notifications.push({
+        id: `pay:${b.bookingId}`, type: 'payment_pending', bookingId: b.bookingId,
+        therapist: b.therapist?.name, speciality: b.therapist?.speciality,
+        date: b.customer?.date, time: b.customer?.time, amount: b.payment?.paidOnline, method: b.payment?.method,
+        createdAt: iso(b.createdAt),
+      });
+    }
+    return sendJSON(res, 200, { notifications });
+  }
+
+  // Pay for an unpaid booking again (from the notification). Only the customer who made it can do this.
+  if (pathname === '/api/resume-payment' && req.method === 'POST') {
+    if (!CASHFREE_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
+    const user = await currentUser(req);
+    if (!user) return sendJSON(res, 401, { error: 'Please log in to complete this payment.' });
+    const bookingId = clip((await readBody(req)).bookingId, 40);
+    const b = await col('bookings').findOne({ bookingId, userId: String(user._id) });
+    if (!b) return sendJSON(res, 404, { error: 'Booking not found.' });
+    if (b.payment?.gateway !== 'cashfree') return sendJSON(res, 400, { error: 'This booking cannot be paid online. Please contact us.' });
+    if (b.status !== 'pending_payment') return sendJSON(res, 200, { status: 'paid', bookingId });
+    if (slotStart(b) < Date.now()) return sendJSON(res, 400, { error: 'This time slot has passed. Please make a new booking.' });
+    // Maybe it was paid and we missed the news: ask Cashfree first
+    const check = await confirmCashfree(b.payment.orderId, 'checkout').catch(() => null);
+    if (check?.status === 'paid') return sendJSON(res, 200, { status: 'paid', bookingId });
+    let order = await cashfree('GET', `/orders/${encodeURIComponent(b.payment.orderId)}`).catch(() => null);
+    if (!order || order.order_status !== 'ACTIVE' || !order.payment_session_id) {
+      // The old order expired: open a new one for the same booking and amount
+      const orderId = `${bookingId}R${Date.now().toString(36).toUpperCase()}`.slice(0, 45);
+      try {
+        order = await cashfree('POST', '/orders', {
+          order_id: orderId, order_amount: b.payment.paidOnline, order_currency: 'INR',
+          customer_details: {
+            customer_id: String(user._id), customer_name: b.customer?.name || user.name,
+            customer_phone: b.customer?.mobile || user.mobile, ...(user.email ? { customer_email: user.email } : {}),
+          },
+          order_meta: { return_url: `${siteOrigin(req)}/payment-return?order_id={order_id}` },
+          order_note: `${b.payment.method === 'online' ? 'Treatment' : 'Visiting charge'} – ${b.therapist?.name || ''}`.slice(0, 200),
+        });
+      } catch (e) {
+        console.error('Cashfree resume failed:', e.message);
+        return sendJSON(res, 502, { error: 'Online payment is not available right now. Please try again in a minute.', code: 'payment_unavailable' });
+      }
+      await col('bookings').updateOne({ _id: b._id }, { $set: { 'payment.orderId': orderId } });
+    }
+    await logEvent('payment_started', `${b.customer?.name || 'A customer'} reopened payment for ₹${b.payment.paidOnline} (${b.bookingId})`, { bookingId });
+    return sendJSON(res, 200, { status: 'pending', bookingId, orderId: order.order_id, paymentSessionId: order.payment_session_id, mode: CF_LIVE ? 'production' : 'sandbox' });
   }
 
   // My Bookings: bookings made on this device or by this account
@@ -721,7 +875,7 @@ async function handle(req, res) {
       payment: {
         method: body.pay, price: q.price, discount: q.discount, referral: q.code, paidOnline: q.payNow,
         cashOnService: q.cashLater, total: q.payNow + q.cashLater, orderId, gateway,
-        visitCharge: body.pay === 'cod' ? q.visitCharge : 0,
+        visitCharge: q.visitCharge,
       },
       customer,
     });
@@ -993,7 +1147,7 @@ async function handle(req, res) {
       const byUser = Object.fromEntries(counts.map((c) => [c._id, c.n]));
       return sendJSON(res, 200, {
         customers: users.map((u) => ({
-          _id: String(u._id), name: u.name, email: u.email, mobile: u.mobile,
+          _id: String(u._id), name: u.name, email: u.email, mobile: u.mobile, city: u.city || '',
           createdAt: iso(u.createdAt), lastLoginAt: iso(u.lastLoginAt), bookings: byUser[String(u._id)] || 0,
         })),
       });
@@ -1004,7 +1158,7 @@ async function handle(req, res) {
       const c = await readCatalog();
       return sendJSON(res, 200, {
         therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists?.[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) }))])),
-        offers: c.offers || [], version: new Date(c.updatedAt).toISOString(),
+        offers: c.offers || [], contact: contactOf(c), version: new Date(c.updatedAt).toISOString(),
       });
     }
     if (pathname === '/api/admin/catalog' && req.method === 'PUT') {
@@ -1018,6 +1172,7 @@ async function handle(req, res) {
       const what = [];
       if (body.therapists !== undefined) { $set.therapists = cleanTherapists(body.therapists); what.push('therapists'); }
       if (body.offers !== undefined) { $set.offers = cleanOffers(body.offers); what.push('offers'); }
+      if (body.contact !== undefined) { $set.contact = cleanContact(body.contact); what.push('contact details'); }
       if (!what.length) return sendJSON(res, 400, { error: 'Nothing to save.' });
       await col('settings').updateOne({ _id: CATALOG_ID }, { $set });
       const note = body.note ? ` (${clip(body.note, 80)})` : '';
@@ -1059,7 +1214,7 @@ function ready() {
   return readyPromise;
 }
 
-/** Handles one request. Used by `node server.js` below, and by Vercel through api/index.js. */
+/** Handles one request. Used by `node backend/server.js` below, and by Vercel through api/index.js. */
 async function requestHandler(req, res) {
   // Setup check: which settings this server can see (yes/no only) and whether the database connects
   if (req.url.split('?')[0] === '/api/health') {
@@ -1091,18 +1246,18 @@ async function requestHandler(req, res) {
 }
 module.exports = requestHandler;
 
-// ---------- Start (only when run directly: node server.js) ----------
+// ---------- Start (only when run directly: node backend/server.js) ----------
 if (require.main === module) (async () => {
   try {
     await ready();
   } catch (e) {
     console.error(`\n✖ Could not connect to MongoDB at ${MONGODB_URI.replace(/\/\/[^@/]*@/, '//***@')}\n  ${e.message}`);
-    console.error('  Start MongoDB (Windows: the "MongoDB" service) or set MONGODB_URI in .env, then run node server.js again.\n');
+    console.error('  Start MongoDB (Windows: the "MongoDB" service) or set MONGODB_URI in .env, then run npm start again.\n');
     process.exit(1);
   }
   const server = http.createServer(requestHandler);
   server.listen(PORT, () => {
-    console.log(`APKASPA running at http://localhost:${PORT}`);
+    console.log(`AAPNA SPA running at http://localhost:${PORT}`);
     console.log(ADMIN_ENABLED
       ? `Admin dashboard: http://localhost:${PORT}/admin  (username "${ADMIN_USERNAME}")`
       : 'Admin dashboard: OFF – set ADMIN_PASSWORD (10+ characters) in .env to turn it on');

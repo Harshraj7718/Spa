@@ -1,4 +1,4 @@
-/* ====== APKASPA admin dashboard ====== */
+/* ====== AAPNA SPA admin dashboard ====== */
 :root {
   --bg: #f4f1ea; --card: #fff; --ink: #1f2a14; --text: #4a4f43; --muted: #7b8070; --line: #e7e3d8;
   --green: #6e8240; --green-soft: #eef0e4; --dark: #23331a; --darker: #1a2410; --gold: #c9a961;
@@ -267,3 +267,10 @@ tr.dim td { opacity: .55; }
   .t-admin-grid { padding: 12px; grid-template-columns: 1fr; }
   .modal { border-radius: 16px; }
 }
+
+/* AAPNA SPA lotus logo */
+.brand-mark { display: block; width: 34px; height: 19px; margin: 0 auto 4px; stroke-width: 1.6; }
+.side-brand .brand-mark { margin: 0 0 4px; width: 30px; height: 17px; }
+@media (max-width: 860px) { .side-brand .brand-mark { display: none; } }
+.contact-form > .muted { margin-bottom: 16px; }
+.contact-form { max-width: 760px; }

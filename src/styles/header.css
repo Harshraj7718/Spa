@@ -87,8 +87,8 @@
   .topbar.hd-hidden { transform: none; }
 }
 
-/* ===== Phone header (≤ 640px) – matches the APKASPA app layout =====
-   avatar left · lotus + APKASPA centred · bell + menu right · city pill hanging below on the right */
+/* ===== Phone header (≤ 640px) – matches the AAPNA SPA app layout =====
+   avatar left · lotus + AAPNA SPA centred · bell + menu right · city pill hanging below on the right */
 .brand-lotus { width: 26px; height: 14px; color: var(--gold); margin-bottom: 1px; }
 @media (max-width: 640px) {
   .topbar-inner { height: 72px; }
@@ -128,3 +128,26 @@
   .city-pill { top: calc(100% - 10px); }   /* sits just below the bell/menu icons */
   .city { top: 96px; }
 }
+
+/* Notification items (payment reminders for logged-in customers) */
+.topbar-actions .icon-btn { position: relative; }
+.bell-dot { position: absolute; top: 2px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--gold); color: #1f2a14; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center; border: 2px solid #1a2410; box-sizing: content-box; }
+.notif-actions { background: #20341a; padding: 0 20px 18px; margin-top: -4px; }
+.notif-read { display: inline-flex; align-items: center; gap: 8px; background: #f3efe4; color: var(--ink); font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 999px; }
+.notif-read svg { width: 16px; height: 16px; }
+.notif-body { display: grid; gap: 12px; max-height: min(60vh, 420px); overflow-y: auto; }
+.notif-item { display: flex; gap: 14px; background: #fff; border: 1px solid #ebe8dd; border-radius: 20px; padding: 16px; }
+.notif-item.unread { border-color: #e2cf96; background: #fffcf3; }
+.notif-ic { position: relative; width: 50px; height: 50px; border-radius: 50%; background: #f6ebcd; color: var(--ink); display: grid; place-items: center; flex-shrink: 0; }
+.notif-ic svg { width: 18px; height: 18px; }
+.notif-item.unread .notif-ic::after { content: ""; position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid #fffcf3; }
+.notif-text { flex: 1; min-width: 0; }
+.notif-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.notif-top b { font-size: 16px; font-weight: 700; color: var(--ink); }
+.notif-id { background: #f6ebcd; color: #6b5420; font-size: 12.5px; font-weight: 700; padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
+.notif-text p { font-size: 14.5px; color: var(--muted); line-height: 1.5; margin: 4px 0 10px; }
+.notif-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.notif-when { background: #efede5; color: #5b6a37; font-size: 12.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px; }
+.notif-pay { background: var(--dark); color: #fff; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
+.notif-pay:hover { background: var(--darker); }
+.notif-pay:disabled { opacity: .7; cursor: wait; }

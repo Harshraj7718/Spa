@@ -11,7 +11,7 @@ import '../../styles/offers.css';
 const badge = (o: Offer) => (o.kind === 'percent' ? `${o.value}% OFF` : `₹${o.value} OFF`);
 
 export default function Offers() {
-  useTitle('Offers – APKASPA');
+  useTitle('Offers – AAPNA SPA');
   useBodyClass('offers-page');
   const toast = useToast();
   const { OFFERS } = useCatalog();

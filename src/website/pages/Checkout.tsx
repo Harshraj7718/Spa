@@ -49,7 +49,7 @@ export default function Checkout() {
 
 function CheckoutPage({ t }: { t: Therapist }) {
   const { BUSINESS_WHATSAPP, VISIT_CHARGE, discountFor } = useCatalog();
-  useTitle(`Book ${t.name} – APKASPA`);
+  useTitle(`Book ${t.name} – AAPNA SPA`);
 
   // ---- Form state ----
   const [stay, setStay] = useState<Stay>('Home Stay');
@@ -177,12 +177,12 @@ function CheckoutPage({ t }: { t: Therapist }) {
     if (landmark.trim()) r.push(['Landmark', landmark.trim()]);
     if (pin) r.push(['Map pin', `https://maps.google.com/?q=${pin[0].toFixed(6)},${pin[1].toFixed(6)}`]);
     if (code) r.push(['Offer code', `${code} (−${rupee(discount)})`]);
-    if (pay === 'online') r.push(['Payment', 'Pay Online'], ['Total', rupee(treatment)]);
+    if (pay === 'online') r.push(['Payment', 'Pay Online'], ['Visiting / travel charge', rupee(VISIT_CHARGE)], ['Total', rupee(treatment + VISIT_CHARGE)]);
     else r.push(['Payment', 'Cash on Delivery'], ['Pay now (visiting)', rupee(VISIT_CHARGE)], ['Cash after service', rupee(treatment)]);
     return r;
   };
   const waLink = (prefix: string) => {
-    const msg = `${prefix} – APKASPA\n\n` + rows().map(([k, v]) => `${k}: ${v}`).join('\n');
+    const msg = `${prefix} – AAPNA SPA\n\n` + rows().map(([k, v]) => `${k}: ${v}`).join('\n');
     return `https://wa.me/${BUSINESS_WHATSAPP}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -216,7 +216,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
       const order = await api.createOrder(d);
       if (order.provider !== 'razorpay') throw new ApiError('Please refresh the page and try again.', 409);
       const rzp = new window.Razorpay({
-        key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'APKASPA',
+        key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'AAPNA SPA',
         description: pay === 'online' ? `${t.name} – ${t.speciality}` : `Visiting charge – ${t.name}`,
         prefill: { name: d.customer.name, contact: '+91' + d.customer.mobile },
         notes: { booking_id: order.bookingId },
@@ -255,7 +255,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
 
   const share = async () => {
     const url = location.href;
-    if (navigator.share) { try { await navigator.share({ title: `Book ${t.name} – APKASPA`, url }); } catch { /* cancelled */ } return; }
+    if (navigator.share) { try { await navigator.share({ title: `Book ${t.name} – AAPNA SPA`, url }); } catch { /* cancelled */ } return; }
     if (await copyText(url, 'Copy this link to share:')) alert('Link copied!');
   };
   const toggleFav = () => { setFav((f) => { favourite.set(`${t.type}:${t.name}`, !f); return !f; }); };
@@ -405,7 +405,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
               <span className="pay-icon"><Icon name="card" /></span>
               <span className="pay-text">
                 <b>Pay Online <em className="rec">Recommended</em></b>
-                <small>Secure, instant confirmation via card, UPI or netbanking. No extra charges.</small>
+                <small>Pay the treatment + {rupee(VISIT_CHARGE)} visiting/travel charge now – secure, instant confirmation via UPI, card or netbanking.</small>
               </span>
               <span className="radio" />
             </label>
@@ -433,7 +433,9 @@ function CheckoutPage({ t }: { t: Therapist }) {
             {pay === 'online' && <>
               <div className="bill-row"><span>Treatment Amount</span><b>{rupee(t.price)}</b></div>
               {discount > 0 && <div className="bill-row discount"><span>Offer ({code})</span><b>−{rupee(discount)}</b></div>}
-              <div className="bill-row total"><span>Total Payable</span><b>{rupee(treatment)}</b></div>
+              <div className="bill-row"><span>Visiting / Travel Charge</span><b>{rupee(VISIT_CHARGE)}</b></div>
+              <div className="bill-row total"><span>Total Payable</span><b>{rupee(treatment + VISIT_CHARGE)}</b></div>
+              <div className="pay-now"><span><small>PAY NOW</small><b>{rupee(treatment + VISIT_CHARGE)}</b></span><span>{rupee(treatment)} + {rupee(VISIT_CHARGE)} visiting charge</span></div>
             </>}
             {pay === 'cod' && <>
               <div className="bill-row"><span>Treatment Amount (Cash on Delivery)</span><b>{rupee(t.price)}</b></div>
@@ -451,7 +453,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
       <div className="checkout-bar">
         <div className="cb-left">
           {!pay && <span className="hint">Select a payment method</span>}
-          {pay === 'online' && <><b>{rupee(treatment)}</b><small>{when}</small></>}
+          {pay === 'online' && <><b>{rupee(treatment + VISIT_CHARGE)}</b><small>incl. {rupee(VISIT_CHARGE)} visiting charge · {when}</small></>}
           {pay === 'cod' && <><b>{rupee(VISIT_CHARGE)}</b><small>Pay {rupee(VISIT_CHARGE)} now · {rupee(treatment)} after service</small></>}
         </div>
         <button className={`btn btn-primary cb-btn ${paying ? 'loading' : ''}`} type="button" disabled={paying} onClick={onPay}>

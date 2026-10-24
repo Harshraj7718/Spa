@@ -1,4 +1,4 @@
-// Admin calls to server.js (/api/admin/*). A 401 means the admin session ended.
+// Admin calls to backend/server.js (/api/admin/*). A 401 means the admin session ended.
 export type Status = 'requested' | 'pending_payment' | 'paid' | 'confirmed' | 'completed' | 'cancelled';
 
 export interface AdminBooking {
@@ -20,7 +20,7 @@ export interface AdminBooking {
 export interface Summary {
   total: number; today: number; upcoming: number; requests: number; revenue: number; customers: number; subscribers: number;
 }
-export interface Customer { _id: string; name: string; email: string; mobile?: string; createdAt: string; lastLoginAt?: string; bookings: number }
+export interface Customer { _id: string; name: string; email: string; mobile?: string; city?: string; createdAt: string; lastLoginAt?: string; bookings: number }
 export interface Subscriber { email: string; createdAt: string }
 export interface AdminEvent { _id: string; type: string; message: string; at: string }
 export interface Analytics {
@@ -41,7 +41,8 @@ export interface AdminTherapist {
   experience?: string; specializes?: string; languages?: string; about?: string; hidden?: boolean;
 }
 export interface AdminOffer { code: string; title: string; desc: string; kind: 'percent' | 'flat'; value: number; max?: number; hidden?: boolean; disabled?: boolean }
-export interface AdminCatalog { therapists: Record<TherapistType, AdminTherapist[]>; offers: AdminOffer[]; version: string }
+export interface AdminContact { whatsapp: string; phone: string; instagram: string; email: string; address: string; hours: string }
+export interface AdminCatalog { therapists: Record<TherapistType, AdminTherapist[]>; offers: AdminOffer[]; contact: AdminContact; version: string }
 
 export class SessionEnded extends Error {}
 
@@ -65,7 +66,7 @@ export const adminApi = {
   subscribers: () => call<{ subscribers: Subscriber[] }>('/api/admin/subscribers'),
   events: () => call<{ events: AdminEvent[] }>('/api/admin/events'),
   catalog: () => call<AdminCatalog>('/api/admin/catalog'),
-  saveCatalog: (b: Partial<Pick<AdminCatalog, 'therapists' | 'offers'>> & { version: string; note: string }) =>
+  saveCatalog: (b: Partial<Pick<AdminCatalog, 'therapists' | 'offers' | 'contact'>> & { version: string; note: string }) =>
     call<{ ok: true; version: string }>('/api/admin/catalog', { method: 'PUT', body: JSON.stringify(b) }),
   analytics: (days: number) => call<Analytics>('/api/admin/analytics?days=' + days),
 };

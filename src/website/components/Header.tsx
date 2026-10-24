@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
+import { BRAND, LotusMark } from './Logo';
 import { useToast } from './Toast';
 import { useAuth } from '../lib/auth';
 import { useEscape } from '../lib/hooks';
 import { savedCity } from '../lib/storage';
+import { api, type AppNotification } from '../lib/api';
+import { loadCashfree } from '../lib/cashfree';
+import { rupee } from '../lib/format';
+
+// Which notifications this browser has already seen ("Mark all read")
+const READ_KEY = 'apkaspa:notif-read';
+const readIds = (): string[] => { try { return JSON.parse(localStorage.getItem(READ_KEY) || '[]') as string[]; } catch { return []; } };
+const slotLabel = (n: AppNotification) => {
+  const d = n.date ? new Date(n.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  return [d, n.time].filter(Boolean).join(' at ');
+};
 
 // ---- Menu items (edit links here). Legal pages with no link yet show "coming soon". ----
 const MAIN: [string, string, IconName][] = [
@@ -26,28 +38,58 @@ const LEGAL: [string, IconName][] = [
 ];
 export const CITIES = ['Indore', 'Delhi', 'Gurgaon'];
 
-function Lotus() {
-  return (
-    <svg className="brand-lotus" viewBox="0 0 40 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 20c-3-3-4-7-4-10 0-3 2-6 4-8 2 2 4 5 4 8 0 3-1 7-4 10Z" />
-      <path d="M20 20c-4-1-8-4-9-8 3 0 6 1 8 3M20 20c4-1 8-4 9-8-3 0-6 1-8 3" />
-      <path d="M20 20c-5 1-11 0-15-4 3-1 7-1 10 1M20 20c5 1 11 0 15-4-3-1-7-1-10 1" />
-      <path d="M2 20h11M27 20h11" />
-    </svg>
-  );
-}
-
 export function Header() {
   const toast = useToast();
   const { user } = useAuth();
   const [drawer, setDrawer] = useState(false);
   const [pop, setPop] = useState<'notif' | 'city' | null>(null);
-  const [city, setCity] = useState(() => (CITIES.includes(savedCity.get() || '') ? savedCity.get()! : CITIES[0]));
-  const [cityChosen, setCityChosen] = useState(() => CITIES.includes(savedCity.get() || ''));
+  const [city, setCity] = useState(() => savedCity.get() || CITIES[0]);
+  const [cityChosen, setCityChosen] = useState(() => Boolean(savedCity.get()));
+  // Logged-in customer: use the city detected from their location at login / sign-up
+  useEffect(() => { if (user?.city) { setCity(user.city); setCityChosen(true); savedCity.set(user.city); } }, [user?.city]);
+  const cityList = CITIES.includes(city) ? CITIES : [city, ...CITIES];
   const [hidden, setHidden] = useState(false);
   const [logoOk, setLogoOk] = useState(true);
   const [avatarOk, setAvatarOk] = useState(true);
   const lastY = useRef(0);
+  const [notes, setNotes] = useState<AppNotification[]>([]);
+  const [seen, setSeen] = useState<string[]>(readIds);
+  const [payingId, setPayingId] = useState('');
+
+  // Logged-in customers: bookings still waiting for payment (checked again when the bell opens or the tab returns)
+  const loadNotes = useCallback(() => {
+    if (!user) { setNotes([]); return; }
+    api.notifications().then((r) => setNotes(r.notifications)).catch(() => { /* keep what we have */ });
+  }, [user]);
+  useEffect(() => {
+    loadNotes();
+    const onVisible = () => { if (!document.hidden) loadNotes(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadNotes]);
+  useEffect(() => { if (pop === 'notif') loadNotes(); }, [pop, loadNotes]);
+  const unread = notes.filter((n) => !seen.includes(n.id)).length;
+  const markAllRead = () => {
+    const ids = [...new Set([...seen, ...notes.map((n) => n.id)])].slice(-200);
+    setSeen(ids);
+    try { localStorage.setItem(READ_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  };
+  // "Pay now": reopen Cashfree for the same booking and amount
+  const payNow = async (n: AppNotification) => {
+    setPayingId(n.bookingId);
+    try {
+      const r = await api.resumePayment(n.bookingId);
+      if (r.status === 'paid' || !r.paymentSessionId) { toast('This booking is already paid 🎉'); loadNotes(); setPayingId(''); return; }
+      const cf = await loadCashfree(r.mode || 'sandbox');
+      if (!cf) throw new Error('Could not open the payment page. Please check your internet connection.');
+      const result = await cf.checkout({ paymentSessionId: r.paymentSessionId, redirectTarget: '_self' });
+      if (result?.error) throw new Error(result.error.message || 'Payment could not start. Please try again.');
+    } catch (e) {
+      toast((e as Error).message);
+      setPayingId('');
+      loadNotes();
+    }
+  };
 
   const closeAll = useCallback(() => { setDrawer(false); setPop(null); }, []);
   useEscape(drawer || pop !== null, closeAll);
@@ -104,15 +146,16 @@ export function Header() {
           </Link>
 
           <Link to="/" className="brand">
-            {/* LOGO: public/assets/images/logo.png (a gold lotus is drawn until it exists) */}
-            {logoOk ? <img src="/assets/images/logo.png" alt="" className="brand-icon" onError={() => setLogoOk(false)} /> : <Lotus />}
-            <span>APKASPA</span>
+            {/* LOGO: the AAPNA SPA lotus (components/Logo.tsx). Put a photo logo at public/assets/images/logo.png to use that instead. */}
+            {logoOk ? <img src="/assets/images/logo.png" alt="" className="brand-icon" onError={() => setLogoOk(false)} /> : <LotusMark className="brand-lotus" />}
+            <span>{BRAND}</span>
           </Link>
 
           <div className="topbar-actions">
             <button className={`icon-btn ${pop === 'notif' ? 'open' : ''}`} aria-label="Notifications" aria-haspopup="dialog"
               aria-expanded={pop === 'notif'} onClick={(e) => togglePop(e, 'notif')}>
               <Icon name="bell" />
+              {unread > 0 && <span className="bell-dot" aria-label={`${unread} new`}>{unread}</span>}
             </button>
             <button className="icon-btn" id="menuBtn" aria-label="Menu" onClick={(e) => { e.stopPropagation(); setPop(null); setDrawer(true); }}>
               <Icon name="menu" />
@@ -128,14 +171,32 @@ export function Header() {
               <div className="notif-head">
                 <span className="notif-bell"><Icon name="bell" /></span>
                 <div><b>Notifications</b><small>Booking and payment updates</small></div>
-                <span className="notif-count">0 new</span>
+                <span className="notif-count">{unread} new</span>
               </div>
+              {unread > 0 && (
+                <div className="notif-actions"><button type="button" className="notif-read" onClick={markAllRead}><Icon name="check" /> Mark all read</button></div>
+              )}
               <div className="notif-body">
-                <div className="notif-empty">
+                {notes.map((n) => (
+                  <article key={n.id} className={`notif-item ${seen.includes(n.id) ? '' : 'unread'}`}>
+                    <span className="notif-ic"><Icon name="check" /></span>
+                    <div className="notif-text">
+                      <div className="notif-top"><b>Payment pending</b><span className="notif-id">#{n.bookingId.slice(-6)}</span></div>
+                      <p>Complete the payment for {n.speciality || n.therapist || 'your session'} to secure your slot.</p>
+                      <div className="notif-meta">
+                        {slotLabel(n) && <span className="notif-when">{slotLabel(n)}</span>}
+                        <button type="button" className="notif-pay" disabled={payingId === n.bookingId} onClick={() => payNow(n)}>
+                          {payingId === n.bookingId ? 'Opening…' : <>Pay {rupee(n.amount || 0)} now →</>}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+                {!notes.length && <div className="notif-empty">
                   <span className="notif-ring"><span><Icon name="bell" /></span></span>
                   <b>No notifications yet</b>
                   <p>{user ? 'Book a session to start receiving booking and payment updates here.' : 'Log in or book a session to start receiving updates here.'}</p>
-                </div>
+                </div>}
               </div>
               <div className="notif-foot"><Link to="/bookings" className="btn btn-dark block" onClick={() => setPop(null)}>View all bookings</Link></div>
             </div>
@@ -144,7 +205,7 @@ export function Header() {
           {pop === 'city' && (
             <div className="hd-pop city" role="listbox" aria-label="Choose your city" onClick={(e) => e.stopPropagation()}>
               <p className="city-head">CHOOSE YOUR CITY</p>
-              {CITIES.map((c) => (
+              {cityList.map((c) => (
                 <button key={c} type="button" className={`city-opt ${c === city ? 'on' : ''}`} role="option" aria-selected={c === city} onClick={() => pickCity(c)}>
                   <span>{c}</span>{c === city && <Icon name="check" />}
                 </button>

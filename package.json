@@ -2,14 +2,14 @@
   "name": "apkaspa-website",
   "version": "1.0.0",
   "private": true,
-  "description": "APKASPA spa website (React + TypeScript) with MongoDB backend and Razorpay checkout",
-  "main": "server.js",
+  "description": "AAPNA SPA website (React + TypeScript) with a Node + MongoDB backend and Cashfree checkout",
+  "main": "backend/server.js",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node server.js",
+    "dev:server": "node backend/server.js",
     "build": "tsc && vite build",
     "typecheck": "tsc",
-    "start": "node server.js"
+    "start": "node backend/server.js"
   },
   "engines": {
     "node": ">=18"

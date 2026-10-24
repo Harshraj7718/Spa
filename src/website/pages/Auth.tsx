@@ -1,13 +1,16 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { LotusMark } from '../components/Logo';
+import { useCatalog } from '../lib/catalog';
+import { useDetectedCity } from '../lib/location';
+import { savedCity } from '../lib/storage';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useBodyClass, useTitle } from '../lib/hooks';
 import '../../styles/auth.css';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const WA = 'https://wa.me/919244092230?text=';
 
 /** Where to go after logging in: ?next=/page (same-site paths only), else home. */
 function useNext() {
@@ -29,8 +32,8 @@ function AuthLayout({ title, side, children }: { title: string; side: string; ch
           {bgOk && <img src="/assets/images/login-bg.jpg" alt="" className="auth-side-bg" onError={() => setBgOk(false)} />}
           <div className="auth-side-inner">
             <div className="f-brand">
-              <svg viewBox="0 0 40 24" className="f-logo" aria-hidden="true"><path d="M2 22 14 6l6 8 4-5 14 13Z" /></svg>
-              <div><b>APKASPA</b><small>RELAX • REJUVENATE • RENEW</small></div>
+              <LotusMark className="f-logo" />
+              <div><b>AAPNA SPA</b><small>RELAX • REJUVENATE • RENEW</small></div>
             </div>
             <p className="eyebrow light"><span className="line" />{side === 'login' ? 'MEMBER ACCESS' : 'NEW MEMBER'}</p>
             <h2 className="side-title">{side === 'login' ? 'Welcome back.' : 'Join the circle.'}</h2>
@@ -65,8 +68,24 @@ function PasswordInput({ id, value, onChange, error, autoComplete, placeholder }
 
 const FieldError = ({ msg }: { msg?: string }) => <p className={`field-error ${msg ? 'show' : ''}`}>{msg}</p>;
 
+function CityChip({ loc }: { loc: ReturnType<typeof useDetectedCity> }) {
+  return (
+    <div className={`city-chip ${loc.status}`} aria-live="polite">
+      <Icon name="pin" />
+      {loc.status === 'found' && <span>Your city: <b>{loc.city}</b></span>}
+      {(loc.status === 'idle' || loc.status === 'asking') && <span>Detecting your city… please allow location</span>}
+      {(loc.status === 'denied' || loc.status === 'failed' || loc.status === 'unsupported') && (
+        <span>{loc.message}{loc.status !== 'unsupported' && <> <button type="button" onClick={loc.retry}>Try again</button></>}</span>
+      )}
+    </div>
+  );
+}
+
 export function Login() {
   const { user, refresh, logout } = useAuth();
+  const { BUSINESS_WHATSAPP } = useCatalog();
+  const loc = useDetectedCity();
+  const city = loc.status === 'found' ? loc.city : '';
   const navigate = useNavigate();
   const next = useNext();
   const [email, setEmail] = useState('');
@@ -84,7 +103,8 @@ export function Login() {
     if (Object.keys(errs).length) return;
     setBusy(true);
     try {
-      await api.login(email.trim(), password);
+      await api.login(email.trim(), password, city);
+      if (city) savedCity.set(city);
       await refresh();
       navigate(next);
     } catch (err) {
@@ -94,7 +114,7 @@ export function Login() {
   };
 
   return (
-    <AuthLayout title="Log In – APKASPA" side="login">
+    <AuthLayout title="Log In – AAPNA SPA" side="login">
       {user ? (
         <div className="signed-in">
           <span className="auth-icon"><Icon name="user" /></span>
@@ -107,7 +127,8 @@ export function Login() {
         <form className="auth-form" onSubmit={submit} noValidate>
           <span className="auth-icon"><Icon name="logIn" /></span>
           <h1>Log In</h1>
-          <p className="auth-sub">Welcome back to APKASPA</p>
+          <p className="auth-sub">Welcome back to AAPNA SPA</p>
+          <CityChip loc={loc} />
           {alert && <div className={`form-alert ${alert.ok ? 'ok' : ''}`} role="alert">{alert.text}</div>}
 
           <label className="lbl" htmlFor="email">Email Address</label>
@@ -123,8 +144,8 @@ export function Login() {
           <button type="submit" className="btn btn-dark block submit-btn" disabled={busy}>{busy ? 'Please wait…' : 'Log In'}</button>
           <div className="or"><span>OR</span></div>
           <p className="auth-links main">New here? <Link to={`/signup${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`}>Create an account</Link></p>
-          <p className="auth-links">Are you a therapist? <a href={WA + encodeURIComponent("Hi, I'm a therapist and need partner login access.")} target="_blank" rel="noopener">Log in here</a></p>
-          <p className="auth-links">Are you a hotel? <a href={WA + encodeURIComponent("Hi, we're a hotel and need partner login access.")} target="_blank" rel="noopener">Log in here</a></p>
+          <p className="auth-links">Are you a therapist? <a href={`https://wa.me/${BUSINESS_WHATSAPP}?text=` + encodeURIComponent("Hi, I'm a therapist and need partner login access.")} target="_blank" rel="noopener">Log in here</a></p>
+          <p className="auth-links">Are you a hotel? <a href={`https://wa.me/${BUSINESS_WHATSAPP}?text=` + encodeURIComponent("Hi, we're a hotel and need partner login access.")} target="_blank" rel="noopener">Log in here</a></p>
         </form>
       )}
     </AuthLayout>
@@ -133,6 +154,8 @@ export function Login() {
 
 export function Signup() {
   const { refresh } = useAuth();
+  const loc = useDetectedCity();
+  const city = loc.status === 'found' ? loc.city : '';
   const navigate = useNavigate();
   const next = useNext();
   const [f, setF] = useState({ name: '', email: '', mobile: '', password: '' });
@@ -152,7 +175,8 @@ export function Signup() {
     if (Object.keys(errs).length) return;
     setBusy(true);
     try {
-      await api.signup({ name: f.name.trim(), email: f.email.trim(), mobile: f.mobile.trim(), password: f.password });
+      await api.signup({ name: f.name.trim(), email: f.email.trim(), mobile: f.mobile.trim(), password: f.password, city });
+      if (city) savedCity.set(city);
       await refresh();
       navigate(next);
     } catch (err) {
@@ -163,11 +187,12 @@ export function Signup() {
   };
 
   return (
-    <AuthLayout title="Create Account – APKASPA" side="signup">
+    <AuthLayout title="Create Account – AAPNA SPA" side="signup">
       <form className="auth-form" onSubmit={submit} noValidate>
         <span className="auth-icon"><Icon name="userPlus" /></span>
         <h1>Create Account</h1>
-        <p className="auth-sub">Join APKASPA in under a minute</p>
+        <p className="auth-sub">Join AAPNA SPA in under a minute</p>
+        <CityChip loc={loc} />
         {alert && <div className="form-alert" role="alert">{alert}</div>}
 
         <label className="lbl" htmlFor="name">Full Name</label>

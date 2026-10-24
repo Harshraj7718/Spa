@@ -72,7 +72,7 @@ function BookingCard({ b, past, index }: { b: CustomerBooking; past: boolean; in
 }
 
 export default function Bookings() {
-  useTitle('My Bookings – APKASPA');
+  useTitle('My Bookings – AAPNA SPA');
   useBodyClass('bookings-page');
   const { user } = useAuth();
   const [list, setList] = useState<CustomerBooking[] | null>(null);

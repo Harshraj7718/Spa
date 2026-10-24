@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from './Icon';
+import { BRAND, LotusMark } from './Logo';
+import { useCatalog } from '../lib/catalog';
+import { showPhone } from '../../../shared/catalog';
 import { useToast } from './Toast';
 import { api } from '../lib/api';
 
@@ -9,6 +12,7 @@ const POLICIES = ['Privacy Policy', 'Terms & Conditions', 'Refund Policy', 'Disc
 const TREATMENTS = ['Swedish Massage', 'Deep Tissue', 'Aromatherapy', 'Hot Stone Therapy', 'Thai Massage', 'Foot Reflexology'];
 
 export function Footer() {
+  const { CONTACT } = useCatalog();
   const toast = useToast();
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState('');
@@ -35,11 +39,14 @@ export function Footer() {
       <div className="container footer-grid">
         <div>
           <div className="f-brand">
-            <svg viewBox="0 0 40 24" className="f-logo" aria-hidden="true"><path d="M2 22 14 6l6 8 4-5 14 13Z" /></svg>
-            <div><b>APKASPA</b><small>RELAX • REJUVENATE • RENEW</small></div>
+            <LotusMark className="f-logo" />
+            <div><b>{BRAND}</b><small>RELAX • REJUVENATE • RENEW</small></div>
           </div>
           <p>Premium spa experiences delivered to your home or hotel in Indore since 2016.</p>
-          <a href="https://www.instagram.com/apkaspaindore" className="f-social" aria-label="Instagram"><Icon name="instagram" /></a>
+          <div className="f-socials">
+            {CONTACT.instagram && <a href={`https://www.instagram.com/${CONTACT.instagram}`} className="f-social" aria-label="Instagram" target="_blank" rel="noopener"><Icon name="instagram" /></a>}
+            {CONTACT.whatsapp && <a href={`https://wa.me/${CONTACT.whatsapp}`} className="f-social" aria-label="WhatsApp" target="_blank" rel="noopener"><Icon name="whatsapp" /></a>}
+          </div>
         </div>
         <div>
           <h5>Quick Links</h5>
@@ -52,9 +59,10 @@ export function Footer() {
         </div>
         <div>
           <h5>Contact</h5>
-          <p className="f-row"><Icon name="mail" />hello@apkaspa.com</p>
-          <p className="f-row"><Icon name="pin" />Vijay Nagar, Indore</p>
-          <p className="f-row"><Icon name="clock" />Daily, 10 AM - 10 PM</p>
+          {CONTACT.phone && <a className="f-row" href={`tel:+${CONTACT.phone}`}><Icon name="phone" />{showPhone(CONTACT.phone)}</a>}
+          {CONTACT.email && <a className="f-row" href={`mailto:${CONTACT.email}`}><Icon name="mail" />{CONTACT.email}</a>}
+          {CONTACT.address && <p className="f-row"><Icon name="pin" />{CONTACT.address}</p>}
+          {CONTACT.hours && <p className="f-row"><Icon name="clock" />{CONTACT.hours}</p>}
           <p className="f-small">Get wellness tips in your inbox</p>
           <form className="newsletter" onSubmit={subscribe} noValidate>
             <input type="email" placeholder="your@email.com" aria-label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -64,7 +72,7 @@ export function Footer() {
         </div>
       </div>
       <div className="container footer-bottom">
-        <span>© {new Date().getFullYear()} APKASPA. All rights reserved.</span>
+        <span>© {new Date().getFullYear()} {BRAND}. All rights reserved.</span>
         <nav>
           {POLICIES.map((p) => (
             <a key={p} href="#" onClick={(e) => { e.preventDefault(); toast(`${p} page is coming soon`); }}>

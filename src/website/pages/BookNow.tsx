@@ -14,11 +14,11 @@ const TABS: { type: TherapistType; title: string; sub: string; icon: IconName }[
 ];
 
 export default function BookNow() {
-  useTitle('Choose Booking Type – APKASPA');
+  useTitle('Choose Booking Type – AAPNA SPA');
   useBodyClass('book-page');
   const { hash } = useLocation();
   const navigate = useNavigate();
-  const { THERAPISTS, ready } = useCatalog();
+  const { THERAPISTS, ready, CONTACT } = useCatalog();
   // The open tab lives in the address (#basic / #therapist / #premium), so links can open a tab directly
   const hashType = hash.slice(1);
   const type: TherapistType = isTherapistType(hashType) ? hashType : 'basic';
@@ -65,8 +65,8 @@ export default function BookNow() {
       <div className="member-bar">
         <span className="crown"><Icon name="crown" /></span>
         <div className="marquee"><span>Become a Premium Member &nbsp;·&nbsp; Unlock exclusive offers &amp; savings &nbsp;&nbsp;&nbsp; Become a Premium Member &nbsp;·&nbsp; Unlock exclusive offers &amp; savings</span></div>
-        <a href="https://wa.me/919244092230" className="mini-btn" aria-label="WhatsApp" target="_blank" rel="noopener"><Icon name="whatsapp" /></a>
-        <a href="tel:+919244092230" className="mini-btn" aria-label="Call"><Icon name="phone" /></a>
+        {CONTACT.whatsapp && <a href={`https://wa.me/${CONTACT.whatsapp}`} className="mini-btn" aria-label="WhatsApp" target="_blank" rel="noopener"><Icon name="whatsapp" /></a>}
+        {CONTACT.phone && <a href={`tel:+${CONTACT.phone}`} className="mini-btn" aria-label="Call"><Icon name="phone" /></a>}
         <Link to="/offers" className="join-btn">Join Now <span>→</span></Link>
       </div>
 

@@ -5,6 +5,8 @@ export interface User {
   name: string;
   email: string;
   mobile?: string;
+  /** City detected from the customer's location at login / sign-up */
+  city?: string;
 }
 
 export interface CustomerBooking {

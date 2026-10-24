@@ -1,4 +1,4 @@
-// Calls to server.js. Errors carry the server's message (and optional field/code).
+// Calls to backend/server.js. Errors carry the server's message (and optional field/code).
 import type { BookingDetails, CustomerBooking, User } from './types';
 
 export class ApiError extends Error {
@@ -36,14 +36,19 @@ async function request<T>(path: string, body?: unknown, init: RequestInit = {}):
 export const api = {
   config: () => request<{ provider: 'cashfree' | 'razorpay' | null; razorpay: boolean; keyId: string | null; cashfreeMode: CashfreeMode | null }>('/api/config'),
   me: () => request<{ user: User | null }>('/api/me'),
-  login: (email: string, password: string) => request<{ user: User }>('/api/login', { email, password }),
-  signup: (b: { name: string; email: string; mobile: string; password: string }) => request<{ user: User }>('/api/signup', b),
+  login: (email: string, password: string, city = '') => request<{ user: User }>('/api/login', { email, password, city }),
+  signup: (b: { name: string; email: string; mobile: string; password: string; city?: string }) => request<{ user: User }>('/api/signup', b),
+  locate: (lat: number, lon: number) =>
+    request<{ city: string; state: string }>(`/api/locate?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}`),
   logout: () => request<{ ok: true }>('/api/logout', {}),
   subscribe: (email: string) => request<{ ok: true; already: boolean }>('/api/subscribe', { email }),
   myBookings: (deviceId: string) => request<{ bookings: CustomerBooking[] }>('/api/my-bookings', { deviceId }),
   bookingRequest: (d: BookingDetails) => request<{ bookingId: string }>('/api/booking-request', d, { keepalive: true }),
   createOrder: (d: BookingDetails) => request<RazorpayOrder | CashfreeOrder>('/api/create-order', d),
   cashfreeVerify: (orderId: string) => request<CashfreeStatus>('/api/cashfree-verify', { orderId }),
+  notifications: () => request<{ notifications: AppNotification[] }>('/api/notifications'),
+  resumePayment: (bookingId: string) =>
+    request<{ status: 'paid' | 'pending'; bookingId: string; orderId?: string; paymentSessionId?: string; mode?: CashfreeMode }>('/api/resume-payment', { bookingId }),
   verifyPayment: (r: RazorpayResponse) => request<{ bookingId: string }>('/api/verify-payment', r),
 };
 
@@ -65,4 +70,17 @@ export interface CashfreeStatus {
   method?: string;
   therapist?: string;
   slot?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'payment_pending';
+  bookingId: string;
+  therapist?: string;
+  speciality?: string;
+  date?: string;
+  time?: string;
+  amount?: number;
+  method?: 'online' | 'cod';
+  createdAt: string;
 }

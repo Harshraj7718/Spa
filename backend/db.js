@@ -1,5 +1,5 @@
 // ============================================================
-// MongoDB storage for the APKASPA website
+// MongoDB storage for the AAPNA SPA website
 //
 // Collections (database name comes from MONGODB_URI, default "apkaspa"):
 //   users        – customer accounts (password stored only as a scrypt hash)

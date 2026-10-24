@@ -37,9 +37,20 @@ export interface Offer {
   disabled?: boolean;
 }
 
+/** Contact details (edited in Admin → Contact). Numbers are digits with country code, e.g. 919244092230. */
+export interface Contact {
+  whatsapp: string;
+  phone: string;
+  instagram: string;
+  email: string;
+  address: string;
+  hours: string;
+}
+
 export interface CatalogData {
   visitCharge: number;
   businessWhatsapp: string;
+  contact?: Partial<Contact>;
   therapistDefaults: { experience: string; specializes: string; languages: string; about: string };
   therapists: Record<TherapistType, TherapistBase[]>;
   offers: Offer[];
@@ -51,7 +62,7 @@ export const PHOTO_DIR = '/assets/images/therapists/';
 
 export const isTherapistType = (t: string): t is TherapistType => (TYPES as string[]).includes(t);
 
-/** Stable id for a therapist. Same rule as keyOf() in server.js. */
+/** Stable id for a therapist. Same rule as keyOf() in backend/server.js. */
 export const keyOf = (t: TherapistBase, i: number) =>
   t.key || String(t.photo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9-]/gi, '') || String(i);
 
@@ -66,9 +77,15 @@ export function makeCatalog(c: CatalogData) {
     (c.therapists?.[ty] || []).map((t, i) => ({ ...t, key: keyOf(t, i) })).filter((t) => !t.hidden)])) as Record<TherapistType, (TherapistBase & { key: string })[]>;
   const all = (ty: TherapistType) => c.therapists?.[ty] || [];
 
+  const CONTACT: Contact = {
+    whatsapp: c.businessWhatsapp || '', phone: c.businessWhatsapp || '', instagram: '', email: '', address: '', hours: '',
+    ...(c.contact || {}),
+  };
+
   return {
     VISIT_CHARGE: c.visitCharge,
-    BUSINESS_WHATSAPP: c.businessWhatsapp,
+    BUSINESS_WHATSAPP: CONTACT.whatsapp,
+    CONTACT,
     OFFERS: offers,
     THERAPISTS,
     /** Finds a therapist by its id (or by position, for old links like /therapist/basic/0). */
@@ -80,7 +97,7 @@ export function makeCatalog(c: CatalogData) {
       if (!base || base.hidden) return null;
       return { ...c.therapistDefaults, ...base, type, id: keyOf(base, index) } as Therapist;
     },
-    /** ₹ discount for an offer code on a given price (0 if the code isn't valid). Mirrors server.js. */
+    /** ₹ discount for an offer code on a given price (0 if the code isn't valid). Mirrors backend/server.js. */
     discountFor(code: string, price: number): number {
       const offer = offers.find((o) => o.code === String(code || '').trim().toUpperCase());
       if (!offer) return 0;
@@ -91,3 +108,10 @@ export function makeCatalog(c: CatalogData) {
   };
 }
 export type Catalog = ReturnType<typeof makeCatalog>;
+
+/** "919244092230" → "+91 92440 92230" for showing a phone number */
+export function showPhone(digits: string): string {
+  const d = String(digits || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('91')) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
+  return d ? '+' + d : '';
+}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from '../components/Icon';
+import { useCatalog } from '../lib/catalog';
+import { showPhone, type Contact } from '../../../shared/catalog';
 import { Photo } from '../components/Photo';
 import { useReveal, useTitle } from '../lib/hooks';
 
@@ -22,12 +24,15 @@ const MASSAGES = [
   { title: 'Head, Neck & Shoulder', text: 'Relieves chronic pain & muscle tension.', photo: 'head-neck-shoulder.jpg' },
   { title: 'Foot Reflexology', text: 'Targeted reflex-point pressure on feet that energises the whole body.', photo: 'foot-reflexology.jpg', badge: 'BEST VALUE' },
 ];
-const CONTACTS = [
-  { label: 'WhatsApp', sub: 'Chat with us now', href: 'https://wa.me/919244092230', icon: 'whatsapp' as IconName, bg: '#25d366', external: true },
-  { label: 'Call Now', sub: '+91 9244092230', href: 'tel:+919244092230', icon: 'phone' as IconName, bg: '#b89a5a' },
-  { label: 'Instagram', sub: '@apkaspa_indore', href: 'https://www.instagram.com/apkaspaindore', icon: 'instagram' as IconName, bg: 'linear-gradient(45deg,#f9a825,#e91e63,#8e24aa)', external: true },
-  { label: 'Email', sub: 'support@apkaspa.com', href: 'mailto:support@apkaspa.com', icon: 'mail' as IconName, bg: '#3b82f6' },
-];
+// Contact cards come from Admin → Contact; a card is hidden while its detail is empty
+function contactCards(c: Contact) {
+  return [
+    c.whatsapp && { label: 'WhatsApp', sub: 'Chat with us now', href: `https://wa.me/${c.whatsapp}`, icon: 'whatsapp' as IconName, bg: '#25d366', external: true },
+    c.phone && { label: 'Call Now', sub: showPhone(c.phone), href: `tel:+${c.phone}`, icon: 'phone' as IconName, bg: '#b89a5a', external: false },
+    c.instagram && { label: 'Instagram', sub: '@' + c.instagram, href: `https://www.instagram.com/${c.instagram}`, icon: 'instagram' as IconName, bg: 'linear-gradient(45deg,#f9a825,#e91e63,#8e24aa)', external: true },
+    c.email && { label: 'Email', sub: c.email, href: `mailto:${c.email}`, icon: 'mail' as IconName, bg: '#3b82f6', external: false },
+  ].filter(Boolean) as { label: string; sub: string; href: string; icon: IconName; bg: string; external: boolean }[];
+}
 const FEATURES = [
   { icon: 'shield' as IconName, title: 'Verified & Trained Therapists', text: 'Every therapist is background-verified, certified, and trained in multiple therapeutic disciplines.' },
   { icon: 'leaf' as IconName, title: 'Safe & Hygienic Service', text: 'Hospital-grade hygiene protocols, sanitised equipment, and single-use linens every session.' },
@@ -37,7 +42,8 @@ const FEATURES = [
 const Swirl = () => <svg className="swirl" viewBox="0 0 200 200" aria-hidden="true"><path d="M20 180 C 60 40, 160 40, 120 120 S 40 160, 180 20" /></svg>;
 
 export default function Home() {
-  useTitle('APKASPA – Spa & Massage at Home in Indore');
+  useTitle('AAPNA SPA – Spa & Massage at Home in Indore');
+  const { CONTACT } = useCatalog();
   const page = useRef<HTMLElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -179,7 +185,7 @@ export default function Home() {
               <p>Reach us on whichever channel suits you — our team replies through the day, every day, 10 AM to 10 PM.</p>
             </div>
             <div className="contact-grid">
-              {CONTACTS.map((c) => (
+              {contactCards(CONTACT).map((c) => (
                 <a key={c.label} className="contact-tile" href={c.href} {...(c.external ? { target: '_blank', rel: 'noopener' } : {})}>
                   <span className="ci" style={{ background: c.bg }}><Icon name={c.icon} /></span>
                   <span><b>{c.label}</b><small>{c.sub}</small></span><i>↗</i>
@@ -196,7 +202,7 @@ export default function Home() {
           <div className="why-box">
             <div className="why-left">
               <Swirl />
-              <p className="eyebrow light"><span className="line" />WHY APKASPA</p>
+              <p className="eyebrow light"><span className="line" />WHY AAPNA SPA</p>
               <h2 className="light">The standard of<br /><span>wellness excellence</span></h2>
               <p>We believe exceptional spa care should be accessible to everyone — brought directly to your comfort zone, with nothing for you to arrange.</p>
               <div className="hero-cta">

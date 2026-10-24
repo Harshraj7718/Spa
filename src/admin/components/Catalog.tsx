@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { adminApi, rupee, type AdminCatalog, type AdminOffer, type AdminTherapist, type TherapistType } from '../api';
+import { adminApi, rupee, type AdminCatalog, type AdminContact, type AdminOffer, type AdminTherapist, type TherapistType } from '../api';
 
 type Props = { refreshKey: number; onError: (e: unknown) => void; toast: (m: string, err?: boolean) => void };
 
@@ -7,7 +7,7 @@ const TYPE_LABEL: Record<TherapistType, string> = { basic: 'Basic Therapist', th
 const TYPES = Object.keys(TYPE_LABEL) as TherapistType[];
 
 /**
- * Google Drive share link → direct image address (same rule as normalizePhoto() in server.js).
+ * Google Drive share link → direct image address (same rule as normalizePhoto() in backend/server.js).
  * Returns null when it isn't a usable link.
  */
 export function photoSrc(v: string): string | null {
@@ -26,7 +26,7 @@ function useCatalogData({ refreshKey, onError, toast }: Props) {
   const [data, setData] = useState<AdminCatalog | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => { adminApi.catalog().then(setData).catch(onError); }, [refreshKey, onError]);
-  const save = useCallback(async (patch: Partial<Pick<AdminCatalog, 'therapists' | 'offers'>>, note: string) => {
+  const save = useCallback(async (patch: Partial<Pick<AdminCatalog, 'therapists' | 'offers' | 'contact'>>, note: string) => {
     if (!data) return false;
     setSaving(true);
     try {
@@ -302,6 +302,50 @@ export function OffersPanel(props: Props) {
           <OfferForm initial={editing.o} saving={saving} onSave={onSave} onClose={close} />
         </Modal>
       )}
+    </section>
+  );
+}
+
+// =============== Contact details ===============
+const showPhone = (d: string) => (d.length === 12 && d.startsWith('91') ? `+91 ${d.slice(2, 7)} ${d.slice(7)}` : d ? '+' + d : '');
+
+export function ContactPanel(props: Props) {
+  const { data, save, saving } = useCatalogData(props);
+  const [draft, setDraft] = useState<AdminContact | null>(null); // null = showing what's saved
+  if (!data) return <section className="panel"><p className="empty">Loading…</p></section>;
+  const form = draft || data.contact;
+  const set = (k: keyof AdminContact, v: string) => setDraft({ ...form, [k]: v });
+  const changed = draft !== null && JSON.stringify(draft) !== JSON.stringify(data.contact);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (await save({ contact: form }, 'contact details')) setDraft(null); // show the cleaned-up saved copy
+  };
+
+  return (
+    <section className="panel">
+      <form className="edit-form contact-form" onSubmit={submit}>
+        <p className="muted">These appear on the website (home page contact cards, footer, booking pages and help links). Leave a box empty to hide it.</p>
+        <div className="form-grid">
+          <Field label="WhatsApp number" hint={form.whatsapp ? <>Opens <b>wa.me/{form.whatsapp.replace(/\D/g, '')}</b></> : '10-digit mobile number'}>
+            <input inputMode="tel" value={form.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} placeholder="92440 92230" />
+          </Field>
+          <Field label="Phone number (Call Now)" hint={form.phone ? showPhone(form.phone.replace(/\D/g, '').length === 10 ? '91' + form.phone.replace(/\D/g, '') : form.phone.replace(/\D/g, '')) : '10-digit mobile number'}>
+            <input inputMode="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="92440 92230" />
+          </Field>
+          <Field label="Instagram" hint="Username (aapnaspa) or the profile link">
+            <input value={form.instagram} onChange={(e) => set('instagram', e.target.value)} placeholder="aapnaspa" />
+          </Field>
+          <Field label="Email">
+            <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="hello@aapnaspa.com" />
+          </Field>
+          <Field label="Address (footer)"><input maxLength={120} value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Vijay Nagar, Indore" /></Field>
+          <Field label="Opening hours (footer)"><input maxLength={60} value={form.hours} onChange={(e) => set('hours', e.target.value)} placeholder="Daily, 10 AM - 10 PM" /></Field>
+        </div>
+        <footer>
+          <button type="button" className="btn" disabled={!changed || saving} onClick={() => setDraft(null)}>Undo changes</button>
+          <button type="submit" className="btn primary" disabled={!changed || saving}>{saving ? 'Saving…' : 'Save – update website'}</button>
+        </footer>
+      </form>
     </section>
   );
 }

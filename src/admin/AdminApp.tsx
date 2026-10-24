@@ -3,14 +3,16 @@ import { adminApi, rupee, SessionEnded, type AdminEvent, type Summary } from './
 import { BookingsPanel } from './components/Bookings';
 import { CustomersPanel, Feed, SubscribersPanel } from './components/Panels';
 import { Analytics } from './components/Analytics';
-import { OffersPanel, TherapistsPanel } from './components/Catalog';
+import { LotusMark } from '../website/components/Logo';
+import { ContactPanel, OffersPanel, TherapistsPanel } from './components/Catalog';
 
-type Tab = 'bookings' | 'analytics' | 'therapists' | 'offers' | 'customers' | 'subscribers' | 'activity';
+type Tab = 'bookings' | 'analytics' | 'therapists' | 'offers' | 'contact' | 'customers' | 'subscribers' | 'activity';
 const TABS: Record<Tab, [string, string]> = {
   bookings: ['Bookings', 'Every booking, updated in real time.'],
   analytics: ['Analytics', 'How the business is doing – updates live as bookings come in.'],
   therapists: ['Therapists', 'Add or edit therapists, prices and photos – changes show on the website straight away.'],
   offers: ['Offers', 'Offer codes for the Offers page and checkout.'],
+  contact: ['Contact', 'WhatsApp, phone, Instagram, email, address and hours shown on the website.'],
   customers: ['Customers', 'People who created an account on the website.'],
   subscribers: ['Subscribers', 'Newsletter sign-ups from the website footer.'],
   activity: ['Activity', 'Everything happening on the website, as it happens.'],
@@ -20,11 +22,12 @@ const NAV_ICONS: Record<Tab, ReactNode> = {
   analytics: <><path d="M3 3v18h18" /><path d="M7 16v-4M12 16V8M17 16v-7" /></>,
   therapists: <><circle cx="12" cy="7" r="4" /><path d="M5 21a7 7 0 0 1 14 0" /><path d="m17 3 1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L14 5.3l2-.3z" /></>,
   offers: <><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
+  contact: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />,
   customers: <><circle cx="9" cy="8" r="4" /><path d="M1 21a8 8 0 0 1 16 0M16 4a4 4 0 0 1 0 8M23 21a8 8 0 0 0-5-7.4" /></>,
   subscribers: <><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></>,
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
 };
-const BASE_TITLE = 'Admin – APKASPA';
+const BASE_TITLE = 'Admin – AAPNA SPA';
 
 // ---------------- Login ----------------
 function Login({ message, onDone }: { message: string; onDone: () => void }) {
@@ -42,7 +45,7 @@ function Login({ message, onDone }: { message: string; onDone: () => void }) {
   return (
     <main className="login-view">
       <form className="login-card" onSubmit={submit} noValidate>
-        <div className="login-brand">APKASPA</div>
+        <div className="login-brand"><LotusMark className="brand-mark" />AAPNA SPA</div>
         <p className="login-tag">ADMIN DASHBOARD</p>
         <h1>Sign in</h1>
         <p className="login-sub">Bookings, customers and payments – live.</p>
@@ -151,12 +154,12 @@ function Dashboard({ onSessionEnd }: { onSessionEnd: (msg?: string) => void }) {
     if (on) ding();
   };
   const logout = async () => { try { await adminApi.logout(); } catch { /* ignore */ } onSessionEnd(); };
-  const noFeed = tab === 'activity' || tab === 'analytics' || tab === 'therapists' || tab === 'offers';
+  const noFeed = tab === 'activity' || tab === 'analytics' || tab === 'therapists' || tab === 'offers' || tab === 'contact';
 
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="side-brand">APKASPA<small>Admin</small></div>
+        <div className="side-brand"><LotusMark className="brand-mark" />AAPNA SPA<small>Admin</small></div>
         <nav className="side-nav">
           {(Object.keys(TABS) as Tab[]).map((t) => (
             <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
@@ -197,6 +200,7 @@ function Dashboard({ onSessionEnd }: { onSessionEnd: (msg?: string) => void }) {
             {tab === 'analytics' && <Analytics refreshKey={refreshKey} onError={onError} />}
             {tab === 'therapists' && <TherapistsPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'offers' && <OffersPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
+            {tab === 'contact' && <ContactPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'customers' && <CustomersPanel refreshKey={refreshKey} onError={onError} />}
             {tab === 'subscribers' && <SubscribersPanel refreshKey={refreshKey} onError={onError} toast={toast} />}
             {tab === 'activity' && <section className="panel"><Feed events={events} highlight={highlight} big /></section>}

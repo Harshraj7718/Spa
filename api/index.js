@@ -1,5 +1,5 @@
 // Vercel runs this for every /api/... request (see vercel.json).
-// It is the same code as `node server.js` – the request handler is shared.
+// It only points to the real backend in backend/server.js – the same code as `npm start`.
 //
 // If the server code can't even start (for example a setting is missing in Vercel),
 // every API call answers with the reason instead of a bare "500" – and /api/health
@@ -11,7 +11,7 @@ const settingsSeen = () => Object.fromEntries(REQUIRED.map((k) => [k, Boolean(pr
 let handler = null;
 let loadError = null;
 try {
-  handler = require('../server');
+  handler = require('../backend/server');
 } catch (e) {
   loadError = e;
   console.error('Server code failed to start:', e);

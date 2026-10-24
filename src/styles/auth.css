@@ -66,3 +66,11 @@
   .auth-wrap { padding-top: 20px; }
   .auth-form-side { padding: 30px 20px 28px; }
 }
+
+/* Detected city on login / sign-up */
+.city-chip { display: flex; align-items: center; justify-content: center; gap: 8px; margin: -10px auto 18px; padding: 8px 14px; border-radius: 999px; background: #f1efe6; color: var(--text); font-size: 13.5px; width: fit-content; max-width: 100%; text-align: center; }
+.city-chip svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--green); }
+.city-chip.found { background: #e9efdb; }
+.city-chip.found b { color: var(--ink); }
+.city-chip.denied, .city-chip.failed, .city-chip.unsupported { border-radius: 14px; }
+.city-chip button { color: var(--green); font-weight: 600; text-decoration: underline; padding: 0; }

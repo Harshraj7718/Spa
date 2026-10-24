@@ -8,13 +8,14 @@ export function CustomersPanel({ refreshKey, onError }: { refreshKey: number; on
     <section className="panel">
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Joined</th><th>Last login</th><th>Bookings</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>City</th><th>Joined</th><th>Last login</th><th>Bookings</th></tr></thead>
           <tbody>
             {(list || []).map((u) => (
               <tr key={u._id}>
                 <td data-label="Name"><b>{u.name}</b></td>
                 <td data-label="Email"><a href={`mailto:${u.email}`}>{u.email}</a></td>
                 <td data-label="Mobile">{u.mobile ? <a href={`tel:+91${u.mobile}`}>+91 {u.mobile}</a> : '–'}</td>
+                <td data-label="City">{u.city || '–'}</td>
                 <td data-label="Joined">{when(u.createdAt)}</td>
                 <td data-label="Last login">{when(u.lastLoginAt)}</td>
                 <td data-label="Bookings"><b>{u.bookings}</b></td>

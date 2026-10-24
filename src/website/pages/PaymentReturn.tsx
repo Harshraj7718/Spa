@@ -10,7 +10,7 @@ import { useCatalog } from '../lib/catalog';
  * The page asks our server, which asks Cashfree, so the result can't be faked from the address bar.
  */
 export default function PaymentReturn() {
-  useTitle('Payment – APKASPA');
+  useTitle('Payment – AAPNA SPA');
   const { BUSINESS_WHATSAPP } = useCatalog();
   const [params] = useSearchParams();
   const orderId = params.get('order_id') || '';
@@ -38,7 +38,7 @@ export default function PaymentReturn() {
     return () => { stop = true; };
   }, [orderId]);
 
-  const wa = `https://wa.me/${BUSINESS_WHATSAPP}?text=${encodeURIComponent(`Hi, about my booking ${orderId} – APKASPA`)}`;
+  const wa = `https://wa.me/${BUSINESS_WHATSAPP}?text=${encodeURIComponent(`Hi, about my booking ${orderId} – AAPNA SPA`)}`;
   const box = { maxWidth: 460, margin: '0 auto', padding: '64px 16px', textAlign: 'center' as const };
 
   if (error) {
