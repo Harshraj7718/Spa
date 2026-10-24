@@ -10,9 +10,30 @@ const TYPES = Object.keys(TYPE_LABEL) as TherapistType[];
  * Google Drive share link → direct image address (same rule as normalizePhoto() in backend/server.js).
  * Returns null when it isn't a usable link.
  */
+export const isUploaded = (v: string) => /^\/api\/photos\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(String(v || '').trim());
+
+/** Shrinks a photo to at most 1000 px on its longest side (JPEG) so it uploads and loads quickly. */
+async function shrinkImage(file: File): Promise<Blob> {
+  let img: ImageBitmap;
+  try { img = await createImageBitmap(file); } catch { throw new Error("This photo format can't be read. Please use a JPG or PNG photo."); }
+  const scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff'; // transparent PNGs get a white background
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  if (!blob) throw new Error('Could not prepare the photo. Please try another one.');
+  return blob;
+}
+
 export function photoSrc(v: string): string | null {
   const s = v.trim();
   if (!s) return null;
+  if (isUploaded(s)) return s;
   if (/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(s)) return null;
   const m = s.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/|(?:open|uc)\?(?:[^#]*&)?id=)([\w-]{10,})/) || s.match(/googleusercontent\.com\/d\/([\w-]{10,})/);
   if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
@@ -90,19 +111,56 @@ function TherapistForm({ initial, type, onSave, onClose, saving }: {
   const [ty, setTy] = useState<TherapistType>(type);
   const set = <K extends keyof AdminTherapist>(k: K, v: AdminTherapist[K]) => setT((x) => ({ ...x, [k]: v }));
   const photoOk = !t.photo.trim() || photoSrc(t.photo) !== null;
+  const [photoMode, setPhotoMode] = useState<'upload' | 'link'>(() => (t.photo && !isUploaded(t.photo) ? 'link' : 'upload'));
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<{ text: string; bad?: boolean }>({ text: '' });
+  const upload = async (file: File) => {
+    if (!file.type.startsWith('image/')) { setUploadMsg({ text: 'Please choose a photo (JPG, PNG or WebP).', bad: true }); return; }
+    if (file.size > 25 * 1024 * 1024) { setUploadMsg({ text: 'That file is too big (over 25 MB).', bad: true }); return; }
+    setUploading(true); setUploadMsg({ text: '' });
+    try {
+      const { url } = await adminApi.uploadPhoto(await shrinkImage(file));
+      set('photo', url);
+      setUploadMsg({ text: 'Photo uploaded ✓ – press Save to put it on the website.' });
+    } catch (e) {
+      setUploadMsg({ text: (e as Error).message, bad: true });
+    } finally {
+      setUploading(false);
+    }
+  };
   const submit = (e: FormEvent) => { e.preventDefault(); if (photoOk) onSave(t, ty); };
 
   return (
     <form className="edit-form" onSubmit={submit}>
       <div className="photo-row">
         <PhotoThumb photo={t.photo} name={t.name} big />
-        <Field wide label="Photo – Google Drive link" hint={
-          !photoOk
-            ? <b className="bad">This isn't a link to a single photo. In Google Drive open the photo (not the folder) → Share → Copy link.</b>
-            : <>In Google Drive: right-click the photo → <b>Share</b> → General access: <b>Anyone with the link</b> → <b>Copy link</b>, then paste it here. If the preview says "Can't load", the photo isn't shared publicly yet.</>
-        }>
-          <input value={t.photo} onChange={(e) => set('photo', e.target.value)} placeholder="https://drive.google.com/file/d/…/view?usp=sharing" />
-        </Field>
+        <div className="photo-pick">
+          <span className="photo-label">Photo</span>
+          <div className="seg" role="tablist" aria-label="Photo source">
+            <button type="button" role="tab" aria-selected={photoMode === 'upload'} className={photoMode === 'upload' ? 'on' : ''} onClick={() => setPhotoMode('upload')}>Upload photo</button>
+            <button type="button" role="tab" aria-selected={photoMode === 'link'} className={photoMode === 'link' ? 'on' : ''} onClick={() => setPhotoMode('link')}>Google Drive link</button>
+          </div>
+          {photoMode === 'upload' ? (
+            <div className="upload-box">
+              <label className={`btn ${uploading ? 'busy' : ''}`}>
+                {uploading ? 'Uploading…' : isUploaded(t.photo) ? 'Choose another photo' : 'Choose photo'}
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden disabled={uploading}
+                  onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) upload(file); }} />
+              </label>
+              <small className={uploadMsg.bad ? 'bad' : ''}>
+                {uploadMsg.text || (isUploaded(t.photo) ? 'Photo uploaded ✓ – it is saved safely in the database.' : 'JPG, PNG or WebP from your phone or computer. It is resized automatically.')}
+              </small>
+            </div>
+          ) : (
+            <Field label="" hint={
+              !photoOk
+                ? <b className="bad">This isn't a link to a single photo. In Google Drive open the photo (not the folder) → Share → Copy link.</b>
+                : <>In Google Drive: right-click the photo → <b>Share</b> → General access: <b>Anyone with the link</b> → <b>Copy link</b>, then paste it here. If the preview says "Can't load", the photo isn't shared publicly yet.</>
+            }>
+              <input value={isUploaded(t.photo) ? '' : t.photo} onChange={(e) => set('photo', e.target.value)} placeholder="https://drive.google.com/file/d/…/view?usp=sharing" aria-label="Google Drive link" />
+            </Field>
+          )}
+        </div>
       </div>
       <div className="form-grid">
         <Field label="Name *"><input required maxLength={40} value={t.name} onChange={(e) => set('name', e.target.value)} /></Field>
@@ -125,7 +183,7 @@ function TherapistForm({ initial, type, onSave, onClose, saving }: {
       </div>
       <footer>
         <button type="button" className="btn" onClick={onClose}>Cancel</button>
-        <button type="submit" className="btn primary" disabled={saving || !photoOk}>{saving ? 'Saving…' : 'Save'}</button>
+        <button type="submit" className="btn primary" disabled={saving || uploading || !photoOk}>{saving ? 'Saving…' : 'Save'}</button>
       </footer>
     </form>
   );

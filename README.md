@@ -97,10 +97,18 @@ no rebuild or redeploy needed.
 **Hide** (taken off the website but kept for later) or **Delete**. Use the *Type* box to move someone between
 Basic / Therapist / Premium.
 
-**Photos from Google Drive:**
+**Therapist photo – choose one of two ways** in the edit form:
+
+*Upload photo* (easiest): press **Choose photo** and pick a JPG, PNG or WebP from your phone or computer.
+It is resized automatically (max 1000 px) and saved in **MongoDB** (collection `photos`), so it is never lost
+when the server restarts or you redeploy on Vercel. (Files can't be saved into the `public` folder on the live
+site – Vercel's disk is temporary and `public` is only read when the site is built.) Photos no longer used by any
+therapist are removed automatically after a day.
+
+*Google Drive link*:
 1. Upload the photo to Google Drive.
 2. Right-click it → **Share** → under *General access* choose **Anyone with the link** → **Copy link**.
-3. Paste the link into the therapist's *Photo – Google Drive link* box. The preview shows the photo; if it says
+3. Paste the link into the *Google Drive link* box. The preview shows the photo; if it says
    "Can't load", the photo isn't shared publicly yet. (A folder link won't work – it must be the photo's own link.)
 
 The server turns the Drive link into a direct image address automatically. Any other `https://` image address also works,

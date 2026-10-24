@@ -274,3 +274,15 @@ tr.dim td { opacity: .55; }
 @media (max-width: 860px) { .side-brand .brand-mark { display: none; } }
 .contact-form > .muted { margin-bottom: 16px; }
 .contact-form { max-width: 760px; }
+
+/* Photo: upload or Google Drive link */
+.photo-pick { flex: 1; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.photo-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.seg { display: inline-flex; background: #f1eee5; border-radius: 999px; padding: 3px; width: fit-content; max-width: 100%; }
+.seg button { padding: 7px 14px; border-radius: 999px; font-size: 13px; color: var(--text); white-space: nowrap; }
+.seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.upload-box { display: grid; gap: 6px; justify-items: start; }
+.upload-box .btn { cursor: pointer; }
+.upload-box .btn.busy { opacity: .6; cursor: wait; }
+.upload-box small { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.upload-box small.bad { color: var(--red); }

@@ -15,7 +15,7 @@ activity feed. It runs in the browser and talks to the backend's admin API (`/ap
 | `api.ts` | Every admin call to the backend, plus the data types and ₹/date formatting |
 | `components/Bookings.tsx` | **Bookings** tab: filters, search, Call / WhatsApp / map links, change a booking's status |
 | `components/Analytics.tsx` + `Charts.tsx` | **Analytics** tab: 7/30/90-day tiles and charts, each with a table view |
-| `components/Catalog.tsx` | **Therapists** tab (add, edit, hide, reorder, delete, photo from a Google Drive link), **Offers** tab (codes, % or ₹ off, on/off, secret codes) and **Contact** tab (WhatsApp, phone, Instagram, email, address, hours) |
+| `components/Catalog.tsx` | **Therapists** tab (add, edit, hide, reorder, delete; photo by **upload** or Google Drive link), **Offers** tab (codes, % or ₹ off, on/off, secret codes) and **Contact** tab (WhatsApp, phone, Instagram, email, address, hours) |
 | `components/Panels.tsx` | **Customers**, **Subscribers** (copy all emails) and the **Activity** feed |
 
 ## Tabs at a glance

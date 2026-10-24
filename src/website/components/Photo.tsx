@@ -7,10 +7,12 @@ import { useState, type ReactNode } from 'react';
 export function Photo({ src, alt = '', className = '', label, children }: {
   src: string; alt?: string; className?: string; label?: string; children?: ReactNode;
 }) {
-  const [missing, setMissing] = useState(false);
+  // Remember which address failed, so a new photo (e.g. changed in the admin) gets a fresh try
+  const [failedSrc, setFailedSrc] = useState('');
+  const missing = !src || failedSrc === src;
   return (
     <div className={`media ${className} ${missing ? 'missing' : ''}`} data-ph={label ?? src.replace(/^\//, '')}>
-      <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setMissing(true)} />
+      <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} onLoad={() => setFailedSrc('')} />
       {children}
     </div>
   );

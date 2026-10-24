@@ -66,9 +66,10 @@ export const isTherapistType = (t: string): t is TherapistType => (TYPES as stri
 export const keyOf = (t: TherapistBase, i: number) =>
   t.key || String(t.photo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9-]/gi, '') || String(i);
 
-/** Image address for a therapist photo (Drive/https links as they are, file names from public/assets). */
-export const photoUrl = (photo: string) => (/^https?:\/\//.test(photo) ? photo : photo ? PHOTO_DIR + photo : '');
-export const photoLabel = (photo: string) => (/^https?:\/\//.test(photo) ? 'photo link not public?' : 'therapists/' + (photo || 'no photo'));
+/** Image address for a therapist photo: uploaded (/api/photos/…) and Drive/https links as they are, file names from public/assets. */
+export const photoUrl = (photo: string) => (/^(https?:\/\/|\/)/.test(photo) ? photo : photo ? PHOTO_DIR + photo : '');
+export const photoLabel = (photo: string) =>
+  (/^https?:\/\//.test(photo) ? 'photo link not public?' : photo.startsWith('/') ? 'photo' : 'therapists/' + (photo || 'no photo'));
 
 /** Everything the pages need, built from one copy of the catalog. */
 export function makeCatalog(c: CatalogData) {

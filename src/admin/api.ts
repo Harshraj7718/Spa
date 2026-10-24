@@ -66,6 +66,8 @@ export const adminApi = {
   subscribers: () => call<{ subscribers: Subscriber[] }>('/api/admin/subscribers'),
   events: () => call<{ events: AdminEvent[] }>('/api/admin/events'),
   catalog: () => call<AdminCatalog>('/api/admin/catalog'),
+  /** Uploads a (resized) therapist photo; returns its permanent address, e.g. /api/photos/…jpg */
+  uploadPhoto: (photo: Blob) => call<{ url: string }>('/api/admin/photos', { method: 'POST', body: photo, headers: { 'Content-Type': photo.type || 'image/jpeg' } }),
   saveCatalog: (b: Partial<Pick<AdminCatalog, 'therapists' | 'offers' | 'contact'>> & { version: string; note: string }) =>
     call<{ ok: true; version: string }>('/api/admin/catalog', { method: 'PUT', body: JSON.stringify(b) }),
   analytics: (days: number) => call<Analytics>('/api/admin/analytics?days=' + days),

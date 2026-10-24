@@ -114,9 +114,19 @@ async function publicCatalog() {
  * Accepts: drive.google.com/file/d/ID/view, …open?id=ID, …uc?id=ID, lh3.googleusercontent.com/d/ID,
  * any other https:// image address, or a file name in public/assets/images/therapists/.
  */
+// Uploaded photos: allowed types, checked by their first bytes (not just the name)
+const PHOTO_MAX = 3 * 1024 * 1024;
+const PHOTO_TYPES = {
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) => b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP',
+};
+const PHOTO_URL_RE = /^\/api\/photos\/([a-f0-9]{24})\.(jpg|png|webp)$/;
+
 function normalizePhoto(input) {
   const v = String(input || '').trim();
   if (!v) return '';
+  if (PHOTO_URL_RE.test(v)) return v; // uploaded in the admin
   if (/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(v)) throw new Error('That is a folder link. Open the photo itself in Google Drive and copy its link.');
   const drive = v.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/|(?:open|uc)\?(?:[^#]*&)?id=)([\w-]{10,})/)
     || v.match(/googleusercontent\.com\/d\/([\w-]{10,})/);
@@ -695,6 +705,20 @@ async function handle(req, res) {
     return sendJSON(res, 200, locateCache.get(cacheKey));
   }
 
+  // Therapist photos uploaded in the admin – stored in MongoDB (collection "photos"), so they survive
+  // restarts and redeploys (Vercel's own disk is temporary). Each photo never changes, so browsers cache it for a year.
+  const photoMatch = pathname.match(/^\/api\/photos\/([a-f0-9]{24})(?:\.(?:jpg|png|webp))?$/);
+  if (photoMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    const photo = await col('photos').findOne({ _id: toId(photoMatch[1]) });
+    if (!photo) return sendJSON(res, 404, { error: 'Photo not found' });
+    const buf = Buffer.from(photo.data.buffer || photo.data);
+    res.writeHead(200, {
+      'Content-Type': photo.type, 'Content-Length': buf.length,
+      'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff',
+    });
+    return res.end(req.method === 'HEAD' ? undefined : buf);
+  }
+
   // ===== Customer accounts =====
   if (pathname === '/api/signup' && req.method === 'POST') {
     const body = await readBody(req);
@@ -1153,6 +1177,22 @@ async function handle(req, res) {
       });
     }
 
+    // Upload a therapist photo (the admin page shrinks it first). Body = the image bytes.
+    if (pathname === '/api/admin/photos' && req.method === 'POST') {
+      const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      if (!PHOTO_TYPES[type]) return sendJSON(res, 400, { error: 'Please choose a JPG, PNG or WebP photo.' });
+      if (Number(req.headers['content-length']) > PHOTO_MAX) {
+        return sendJSON(res, 413, { error: 'Photo is too big (max 3 MB).' }, { Connection: 'close' });
+      }
+      let buf;
+      try { buf = await readRawBody(req, PHOTO_MAX); } catch (e) { return sendJSON(res, 413, { error: 'Photo is too big (max 3 MB).' }); }
+      if (!buf || !buf.length) return sendJSON(res, 400, { error: 'No photo received. Please try again.' });
+      if (!PHOTO_TYPES[type](buf)) return sendJSON(res, 400, { error: "That file isn't a valid image." });
+      const r = await col('photos').insertOne({ type, data: buf, size: buf.length, createdAt: new Date() });
+      const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+      return sendJSON(res, 201, { url: `/api/photos/${r.insertedId}.${ext}` });
+    }
+
     // Therapists & offers editor
     if (pathname === '/api/admin/catalog' && req.method === 'GET') {
       const c = await readCatalog();
@@ -1175,6 +1215,10 @@ async function handle(req, res) {
       if (body.contact !== undefined) { $set.contact = cleanContact(body.contact); what.push('contact details'); }
       if (!what.length) return sendJSON(res, 400, { error: 'Nothing to save.' });
       await col('settings').updateOne({ _id: CATALOG_ID }, { $set });
+      if ($set.therapists) {
+        const used = Object.values($set.therapists).flat().map((t) => (String(t.photo).match(PHOTO_URL_RE) || [])[1]).filter(Boolean).map(toId);
+        await col('photos').deleteMany({ _id: { $nin: used }, createdAt: { $lt: new Date(Date.now() - 864e5) } }).catch(() => {});
+      }
       const note = body.note ? ` (${clip(body.note, 80)})` : '';
       await logEvent('catalog_update', `Admin updated the ${what.join(' and ')}${note} – live on the website`);
       return sendJSON(res, 200, { ok: true, version: $set.updatedAt.toISOString() });

@@ -22,6 +22,7 @@ Settings → Environment Variables, and `api/index.js` (Vercel needs it in that 
 |---|---|
 | `GET /api/config` | Which payment gateway is on (Cashfree / Razorpay) |
 | `GET /api/catalog` | Therapists, prices, offers and contact details to show (edited in the admin) |
+| `GET /api/photos/:id` | Serves an uploaded therapist photo (cached for a year) |
 | `GET /api/locate?lat=&lon=` | Turns the customer's location into a city name (OpenStreetMap; coordinates not stored) |
 | `POST /api/signup`, `/api/login`, `/api/logout`, `GET /api/me` | Customer accounts (scrypt-hashed passwords, 30-day login cookie, 5 wrong tries = 15 min lock); saves the detected city |
 | `POST /api/subscribe` | Newsletter sign-up |
@@ -45,6 +46,7 @@ Settings → Environment Variables, and `api/index.js` (Vercel needs it in that 
 | `GET /api/admin/bookings` | Bookings list with filter/search |
 | `PATCH /api/admin/bookings/:id` | Change a booking's status (customer sees it on My Bookings) |
 | `GET /api/admin/analytics?days=` | Data for the charts |
+| `POST /api/admin/photos` | Upload a therapist photo (JPG/PNG/WebP, max 3 MB) – saved in MongoDB |
 | `GET` / `PUT /api/admin/catalog` | Therapists, offers & contact details editor (Drive photo links converted, numbers/emails cleaned, everything validated) |
 | `GET /api/admin/customers`, `/api/admin/subscribers`, `/api/admin/events` | Customers, newsletter list, activity feed |
 
@@ -59,4 +61,4 @@ Search for these headings in the file:
 
 ## Database (MongoDB, database `apkaspa`)
 
-`users`, `bookings`, `subscribers`, `events` (activity, auto-deleted after 90 days), `settings` (document `catalog`).
+`users`, `bookings`, `subscribers`, `photos` (uploaded therapist photos), `events` (activity, auto-deleted after 90 days), `settings` (document `catalog`).
