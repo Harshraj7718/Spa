@@ -55,7 +55,7 @@ export default function PaymentReturn() {
       <main className="container" style={box} aria-live="polite">
         <h1 style={{ color: 'var(--ink)', fontSize: 26 }}>Confirming your payment…</h1>
         <p style={{ margin: '10px 0 22px' }}>Please don't close this page. This usually takes a few seconds.</p>
-        {result && <p className="muted">Still waiting for the bank. Booking ID <b>{orderId}</b> – you can also check <Link to="/bookings">My Bookings</Link> in a minute.</p>}
+        {result && <p className="muted">Still waiting for the bank. Booking ID <b className="allow-copy">{orderId}</b> – you can also check <Link to="/bookings">My Bookings</Link> in a minute.</p>}
       </main>
     );
   }
@@ -73,7 +73,7 @@ export default function PaymentReturn() {
     <main className="container" style={box}>
       <h1 style={{ color: 'var(--ink)', fontSize: 26 }}>Booking confirmed 🎉</h1>
       <div className="success-box" style={{ margin: '16px 0' }}>
-        <b>Booking ID: {result.bookingId}</b>
+        <b className="allow-copy">Booking ID: {result.bookingId}</b>
         {result.paymentId && <small>Payment ID: {result.paymentId}</small>}
       </div>
       <p style={{ margin: '0 0 22px' }}>

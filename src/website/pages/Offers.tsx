@@ -54,7 +54,7 @@ export default function Offers() {
             <p>{o.desc}</p>
             <div className="code-box">
               <small>Use code</small>
-              <b>{o.code}</b>
+              <b className="allow-copy">{o.code}</b>
               <button type="button" className={`copy-btn ${copied === o.code ? 'done' : ''}`} onClick={() => copy(o.code)}>
                 <Icon name={copied === o.code ? 'check' : 'copy'} />{copied === o.code ? 'Copied' : 'Copy'}
               </button>

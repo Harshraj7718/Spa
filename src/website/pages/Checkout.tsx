@@ -468,7 +468,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
             <button className="sheet-close" aria-label="Close" onClick={closeSheet}>×</button>
             <h3 id="sheetTitle">Booking confirmed 🎉</h3>
             <div>
-              <div className="success-box"><b>Booking ID: {sheet.bookingId}</b><small>Payment ID: {sheet.paymentId}</small></div>
+              <div className="success-box"><b className="allow-copy">Booking ID: {sheet.bookingId}</b><small className="allow-copy">Payment ID: {sheet.paymentId}</small></div>
               {rows().map(([k, v]) => <div key={k} className="sum-row"><span>{k}</span><span>{v}</span></div>)}
             </div>
             <Link className="btn btn-primary block" to="/bookings">View my bookings <span>→</span></Link>

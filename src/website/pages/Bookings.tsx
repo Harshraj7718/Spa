@@ -64,7 +64,7 @@ function BookingCard({ b, past, index }: { b: CustomerBooking; past: boolean; in
         <div className="bk-row"><Icon name="card" /><span><PayLine b={b} />{b.payment?.referral ? ` · code ${b.payment.referral}` : ''}</span></div>
       </div>
       <div className="bk-foot">
-        <span>ID: {b.bookingId}</span>
+        <span>ID: <span className="allow-copy">{b.bookingId}</span></span>
         <a href={`https://wa.me/${BUSINESS_WHATSAPP}?text=${help}`} target="_blank" rel="noopener">Need help?</a>
       </div>
     </article>
