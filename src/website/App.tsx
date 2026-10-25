@@ -13,6 +13,10 @@ import Offers from './pages/Offers';
 import Bookings from './pages/Bookings';
 import { Login, Signup } from './pages/Auth';
 import PaymentReturn from './pages/PaymentReturn';
+import Privacy from './pages/Privacy';
+import Refund from './pages/Refund';
+import InappropriatePolicy from './pages/InappropriatePolicy';
+import Terms from './pages/Terms';
 
 /** Which shared parts a page shows (same as the original site). */
 function Page({ header = true, footer = false, nav = true, children }: { header?: boolean; footer?: boolean; nav?: boolean; children: ReactNode }) {
@@ -81,6 +85,10 @@ export default function App() {
             <Route path="/login" element={<Page><Login /></Page>} />
             <Route path="/signup" element={<Page><Signup /></Page>} />
             <Route path="/payment-return" element={<Page><PaymentReturn /></Page>} />
+            <Route path="/privacy-policy" element={<Page footer><Privacy /></Page>} />
+            <Route path="/refund-policy" element={<Page footer><Refund /></Page>} />
+            <Route path="/policy-against-inappropriate-requests" element={<Page footer><InappropriatePolicy /></Page>} />
+            <Route path="/terms-and-conditions" element={<Page footer><Terms /></Page>} />
 
             <Route path="/index.html" element={<LegacyRedirect to="/" />} />
             <Route path="/book-now.html" element={<LegacyRedirect to="/book-now" />} />

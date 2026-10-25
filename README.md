@@ -78,8 +78,8 @@ public/assets/
     ├── hero-poster.jpg              ← still shown while the video loads
     ├── logo.png                     ← optional photo logo; until it exists the built-in AAPNA SPA lotus logo is shown
     ├── avatar.jpg                   ← round picture, top-left of the header
-    ├── home-service.jpg, hotel-service.jpg, therapist.jpg      ← home page service cards
-    ├── full-body.jpg, head-neck-shoulder.jpg, foot-reflexology.jpg  ← massage cards
+    ├── home-service.webp, hotel-service.webp, therapist.webp   ← home page service banners ("Designed around your comfort")
+    ├── full-body.webp, head-neck-shoulder.webp, foot-reflexology.webp  ← massage banners ("Our most loved massages")
     ├── login-bg.jpg                 ← photo behind the login page's left panel (desktop)
     ├── notice-banner.jpg            ← optional banner above the time slots (e.g. holiday closure)
     └── therapists/

@@ -151,3 +151,17 @@
 .notif-pay { background: var(--dark); color: #fff; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
 .notif-pay:hover { background: var(--darker); }
 .notif-pay:disabled { opacity: .7; cursor: wait; }
+
+/* City picker: "Use my current location" */
+.city-locate { color: var(--green); border-bottom: 1px solid #ece8da; }
+.city-locate span { display: flex; align-items: center; gap: 10px; }
+.city-locate svg { width: 18px; height: 18px; }
+.city-locate:disabled { opacity: .7; cursor: wait; }
+
+/* City picker: type a city by hand */
+.city-type { display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #ece8da; }
+.city-type input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #e3e0d2; background: #fff; font: inherit; font-size: 14px; color: var(--ink); outline: none; }
+.city-type input:focus { border-color: var(--green); }
+.city-type button { padding: 0 14px; border-radius: 10px; background: var(--dark); color: #fff; font-weight: 600; font-size: 14px; }
+.city-type button:disabled { opacity: .45; cursor: default; }
+.city-err { padding: 0 18px 8px; font-size: 12.5px; color: #c0392b; }

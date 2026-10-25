@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { BRAND, LotusMark } from './Logo';
@@ -9,6 +9,7 @@ import { savedCity } from '../lib/storage';
 import { api, type AppNotification } from '../lib/api';
 import { loadCashfree } from '../lib/cashfree';
 import { rupee } from '../lib/format';
+import { detectCity } from '../lib/location';
 
 // Which notifications this browser has already seen ("Mark all read")
 const READ_KEY = 'apkaspa:notif-read';
@@ -28,6 +29,11 @@ const MAIN: [string, string, IconName][] = [
   ['Contact', '/#contact', 'chat'],
   ['About Us', '/#why', 'building'],
 ];
+// Legal pages that exist (others still show "coming soon")
+const LEGAL_PAGES: Record<string, string> = { 'Privacy Policy': '/privacy-policy', 'Refund & Cancellation': '/refund-policy',
+  'Inappropriate Requests Policy': '/policy-against-inappropriate-requests',
+  'Terms & Conditions': '/terms-and-conditions',
+};
 const LEGAL: [string, IconName][] = [
   ['Careers', 'briefcase'],
   ['Terms & Conditions', 'file'],
@@ -135,6 +141,31 @@ export function Header() {
     setCity(c); setCityChosen(true); savedCity.set(c); setPop(null);
     toast(`Showing services in ${c}`);
   };
+  // Typing a city by hand: letters, spaces, dots and dashes; first letters made capital ("navi mumbai" → "Navi Mumbai")
+  const [typedCity, setTypedCity] = useState('');
+  const [typedErr, setTypedErr] = useState('');
+  const submitTypedCity = (e: FormEvent) => {
+    e.preventDefault();
+    const c = typedCity.trim().replace(/\s+/g, ' ');
+    if (!/^[\p{L}][\p{L} .'-]{1,39}$/u.test(c)) { setTypedErr('Please type a city name (letters only).'); return; }
+    setTypedCity(''); setTypedErr('');
+    pickCity(c.replace(/(^|[\s-])(\p{L})/gu, (_m, p, ch: string) => p + ch.toUpperCase()));
+  };
+  // "Use my current location": the browser asks for permission, then we look up the city
+  const [locating, setLocating] = useState(false);
+  const [locateMsg, setLocateMsg] = useState('');
+  const useMyLocation = useCallback(async () => {
+    setLocating(true); setLocateMsg('');
+    const r = await detectCity();
+    setLocating(false);
+    if (r.status === 'found') pickCity(r.city);
+    else setLocateMsg(r.message);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // First time the picker opens with no city chosen yet: ask straight away
+  const askedOnce = useRef(false);
+  useEffect(() => {
+    if (pop === 'city' && !cityChosen && !askedOnce.current) { askedOnce.current = true; useMyLocation(); }
+  }, [pop, cityChosen, useMyLocation]);
 
   return (
     <>
@@ -205,12 +236,22 @@ export function Header() {
           {pop === 'city' && (
             <div className="hd-pop city" role="listbox" aria-label="Choose your city" onClick={(e) => e.stopPropagation()}>
               <p className="city-head">CHOOSE YOUR CITY</p>
+              <button type="button" className="city-opt city-locate" onClick={useMyLocation} disabled={locating}>
+                <span><Icon name="pin" />{locating ? 'Finding your location…' : 'Use my current location'}</span>
+              </button>
+              <form className="city-type" onSubmit={submitTypedCity}>
+                <input value={typedCity} onChange={(e) => { setTypedCity(e.target.value); setTypedErr(''); }} placeholder="Or type your city" aria-label="Type your city" maxLength={40} autoComplete="address-level2" />
+                <button type="submit" disabled={!typedCity.trim()}>Set</button>
+              </form>
+              {typedErr && <p className="city-err" role="alert">{typedErr}</p>}
               {cityList.map((c) => (
                 <button key={c} type="button" className={`city-opt ${c === city ? 'on' : ''}`} role="option" aria-selected={c === city} onClick={() => pickCity(c)}>
                   <span>{c}</span>{c === city && <Icon name="check" />}
                 </button>
               ))}
-              {!cityChosen && <p className="city-note">We couldn't place you automatically — pick the city you'd like service in.</p>}
+              {locateMsg
+                ? <p className="city-note">{locateMsg} You can also pick a city from the list.</p>
+                : !cityChosen && !locating && <p className="city-note">Allow location to detect your city, or pick the city you'd like service in.</p>}
             </div>
           )}
         </div>
@@ -233,11 +274,15 @@ export function Header() {
         </nav>
         <p className="hd-section">LEGAL &amp; POLICIES</p>
         <nav className="hd-legal">
-          {LEGAL.map(([label, icon]) => (
+          {LEGAL.map(([label, icon]) => (LEGAL_PAGES[label] ? (
+            <Link key={label} to={LEGAL_PAGES[label]} className="hd-item sm" onClick={() => setDrawer(false)}>
+              <Icon name={icon} /><span>{label}</span>
+            </Link>
+          ) : (
             <button key={label} type="button" className="hd-item sm" onClick={() => toast(`${label} page is coming soon`)}>
               <Icon name={icon} /><span>{label}</span>
             </button>
-          ))}
+          )))}
         </nav>
       </aside>
     </>

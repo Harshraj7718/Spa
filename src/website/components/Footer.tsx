@@ -8,7 +8,11 @@ import { useToast } from './Toast';
 import { api } from '../lib/api';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const POLICIES = ['Privacy Policy', 'Terms & Conditions', 'Refund Policy', 'Disclaimer', 'Inappropriate Requests Policy'];
+const POLICIES = ['Privacy Policy', 'Terms & Conditions', 'Refund Policy', 'Inappropriate Requests Policy'];
+const POLICY_PAGES: Record<string, string> = { 'Privacy Policy': '/privacy-policy', 'Refund Policy': '/refund-policy',
+  'Inappropriate Requests Policy': '/policy-against-inappropriate-requests',
+  'Terms & Conditions': '/terms-and-conditions',
+}; // others: coming soon
 const TREATMENTS = ['Swedish Massage', 'Deep Tissue', 'Aromatherapy', 'Hot Stone Therapy', 'Thai Massage', 'Foot Reflexology'];
 
 export function Footer() {
@@ -74,11 +78,13 @@ export function Footer() {
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {BRAND}. All rights reserved.</span>
         <nav>
-          {POLICIES.map((p) => (
+          {POLICIES.map((p) => (POLICY_PAGES[p] ? (
+            <Link key={p} to={POLICY_PAGES[p]}>{p === 'Terms & Conditions' ? 'Terms' : p}</Link>
+          ) : (
             <a key={p} href="#" onClick={(e) => { e.preventDefault(); toast(`${p} page is coming soon`); }}>
               {p === 'Terms & Conditions' ? 'Terms' : p}
             </a>
-          ))}
+          )))}
         </nav>
       </div>
     </footer>

@@ -7,11 +7,11 @@ import { Photo } from '../components/Photo';
 import { useReveal, useTitle } from '../lib/hooks';
 
 const OFFERINGS = [
-  { title: 'Home Service', tag: 'We come to you', photo: 'home-service.jpg', icon: 'home' as IconName, to: '/book-now#basic', cta: 'BOOK THIS SERVICE',
+  { title: 'Home Service', tag: 'We come to you', photo: 'home-service.webp', icon: 'home' as IconName, to: '/book-now#basic', cta: 'BOOK THIS SERVICE',
     text: 'Our certified therapists arrive at your door with everything — massage table, linens, premium oils, and complete expertise.' },
-  { title: 'Hotel Service', tag: 'Perfect for your stay', photo: 'hotel-service.jpg', icon: 'hotel' as IconName, to: '/book-now#basic', cta: 'BOOK THIS SERVICE',
+  { title: 'Hotel Service', tag: 'Perfect for your stay', photo: 'hotel-service.webp', icon: 'hotel' as IconName, to: '/book-now#basic', cta: 'BOOK THIS SERVICE',
     text: 'Visiting Indore? We come to you. Available at all major hotels — we turn your room into a private wellness sanctuary.' },
-  { title: 'Book a Therapist', tag: 'Pick your favourite', photo: 'therapist.jpg', icon: 'user' as IconName, to: '/book-now#therapist', cta: 'CHOOSE A THERAPIST',
+  { title: 'Book a Therapist', tag: 'Pick your favourite', photo: 'therapist.webp', icon: 'user' as IconName, to: '/book-now#therapist', cta: 'CHOOSE A THERAPIST',
     text: "Browse our certified therapists, compare ratings and specialties, and book the one who's right for you." },
 ];
 const QUICK = [
@@ -20,9 +20,9 @@ const QUICK = [
   { title: 'Book a Therapist', sub: 'Pick your favourite', icon: 'users' as IconName, to: '/book-now#therapist' },
 ];
 const MASSAGES = [
-  { title: 'Full Body', text: 'Reduces stress & promotes relaxation.', photo: 'full-body.jpg' },
-  { title: 'Head, Neck & Shoulder', text: 'Relieves chronic pain & muscle tension.', photo: 'head-neck-shoulder.jpg' },
-  { title: 'Foot Reflexology', text: 'Targeted reflex-point pressure on feet that energises the whole body.', photo: 'foot-reflexology.jpg', badge: 'BEST VALUE' },
+  { title: 'Full Body', text: 'Reduces stress & promotes relaxation.', photo: 'full-body.webp' },
+  { title: 'Head, Neck & Shoulder', text: 'Relieves chronic pain & muscle tension.', photo: 'head-neck-shoulder.webp' },
+  { title: 'Foot Reflexology', text: 'Targeted reflex-point pressure on feet that energises the whole body.', photo: 'foot-reflexology.webp', badge: 'BEST VALUE' },
 ];
 // Contact cards come from Admin → Contact; a card is hidden while its detail is empty
 function contactCards(c: Contact) {
@@ -120,13 +120,13 @@ export default function Home() {
             ))}
           </nav>
 
-          <div className="grid-3">
+          {/* Banner photos (public/assets/images/*-service.webp, therapist.webp) already carry the title and logo */}
+          <div className="grid-3 offer-banners">
             {OFFERINGS.map((o) => (
-              <article key={o.title} className="offer-card reveal">
-                <Photo src={`/assets/images/${o.photo}`} alt={o.title} className="offer-media">
-                  <span className="tag">{o.tag}</span>
-                  <span className="offer-icon"><Icon name={o.icon} /></span>
-                </Photo>
+              <article key={o.title} className="offer-card banner reveal">
+                <Link to={o.to} aria-label={o.title}>
+                  <Photo src={`/assets/images/${o.photo}`} alt={`${o.title} – ${o.tag}`} className="offer-media" />
+                </Link>
                 <div className="offer-body">
                   <h3>{o.title}</h3>
                   <p>{o.text}</p>
@@ -157,15 +157,15 @@ export default function Home() {
             <div className="carousel" ref={track}>
               {MASSAGES.map((m) => (
                 <article key={m.title} className="massage-card reveal">
-                  <Photo src={`/assets/images/${m.photo}`} alt={m.title} className="massage-media">
+                  {/* Banner photo (public/assets/images/<photo>) – carries its own title, so only the badge sits on top */}
+                  <Photo src={`/assets/images/${m.photo}`} alt={`${m.title} massage`} className="massage-media banner">
                     {m.badge && <span className="badge">{m.badge}</span>}
-                    <span className="time"><Icon name="clock" />45 Min</span>
                   </Photo>
                   <div className="massage-body">
                     <h3>{m.title}</h3>
                     <p>{m.text}</p>
                     <Link to="/book-now" className="btn btn-dark block">Book Session <span>→</span></Link>
-                    <p className="m-dur m-only"><Icon name="clock" />45 Min</p>
+                    <p className="m-dur"><Icon name="clock" />45 Min</p>
                   </div>
                 </article>
               ))}
