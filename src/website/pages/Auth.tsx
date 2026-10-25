@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { LotusMark } from '../components/Logo';
 import { useCatalog } from '../lib/catalog';
-import { useDetectedCity } from '../lib/location';
+import { cityLabel, useDetectedCity } from '../lib/location';
 import { savedCity } from '../lib/storage';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -72,7 +72,7 @@ function CityChip({ loc }: { loc: ReturnType<typeof useDetectedCity> }) {
   return (
     <div className={`city-chip ${loc.status}`} aria-live="polite">
       <Icon name="pin" />
-      {loc.status === 'found' && <span>Your city: <b>{loc.city}</b></span>}
+      {loc.status === 'found' && <span>Your city: <b>{cityLabel(loc.city, loc.state)}</b></span>}
       {(loc.status === 'idle' || loc.status === 'asking') && <span>Detecting your city… please allow location</span>}
       {(loc.status === 'denied' || loc.status === 'failed' || loc.status === 'unsupported') && (
         <span>{loc.message}{loc.status !== 'unsupported' && <> <button type="button" onClick={loc.retry}>Try again</button></>}</span>
@@ -104,7 +104,7 @@ export function Login() {
     setBusy(true);
     try {
       await api.login(email.trim(), password, city);
-      if (city) savedCity.set(city);
+      if (loc.status === 'found') savedCity.set(cityLabel(loc.city, loc.state));
       await refresh();
       navigate(next);
     } catch (err) {
@@ -176,7 +176,7 @@ export function Signup() {
     setBusy(true);
     try {
       await api.signup({ name: f.name.trim(), email: f.email.trim(), mobile: f.mobile.trim(), password: f.password, city });
-      if (city) savedCity.set(city);
+      if (loc.status === 'found') savedCity.set(cityLabel(loc.city, loc.state));
       await refresh();
       navigate(next);
     } catch (err) {

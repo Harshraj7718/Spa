@@ -9,7 +9,7 @@ import { savedCity } from '../lib/storage';
 import { api, type AppNotification } from '../lib/api';
 import { loadCashfree } from '../lib/cashfree';
 import { rupee } from '../lib/format';
-import { detectCity } from '../lib/location';
+import { cityLabel, cleanTypedCity, detectCity } from '../lib/location';
 
 // Which notifications this browser has already seen ("Mark all read")
 const READ_KEY = 'apkaspa:notif-read';
@@ -42,18 +42,19 @@ const LEGAL: [string, IconName][] = [
   ['Disclaimer', 'warn'],
   ['Inappropriate Requests Policy', 'shieldAlert'],
 ];
-export const CITIES = ['Indore', 'Delhi', 'Gurgaon'];
 
 export function Header() {
   const toast = useToast();
   const { user } = useAuth();
   const [drawer, setDrawer] = useState(false);
   const [pop, setPop] = useState<'notif' | 'city' | null>(null);
-  const [city, setCity] = useState(() => savedCity.get() || CITIES[0]);
-  const [cityChosen, setCityChosen] = useState(() => Boolean(savedCity.get()));
-  // Logged-in customer: use the city detected from their location at login / sign-up
-  useEffect(() => { if (user?.city) { setCity(user.city); setCityChosen(true); savedCity.set(user.city); } }, [user?.city]);
-  const cityList = CITIES.includes(city) ? CITIES : [city, ...CITIES];
+  // The customer's city as "City, State" (detected from their location or typed), kept in this browser
+  const [city, setCity] = useState(() => savedCity.get() || '');
+  const cityChosen = Boolean(city);
+  const [cityName, cityState] = city.split(/,\s*/);
+  // Logged-in customer on a new device: start from the city detected at login / sign-up.
+  // A city chosen in this browser always wins, so a later pick isn't overwritten on the next page.
+  useEffect(() => { if (user?.city && !savedCity.get()) { setCity(user.city); savedCity.set(user.city); } }, [user?.city]);
   const [hidden, setHidden] = useState(false);
   const [logoOk, setLogoOk] = useState(true);
   const [avatarOk, setAvatarOk] = useState(true);
@@ -138,18 +139,18 @@ export function Header() {
     setPop((p) => (p === which ? null : which));
   };
   const pickCity = (c: string) => {
-    setCity(c); setCityChosen(true); savedCity.set(c); setPop(null);
-    toast(`Showing services in ${c}`);
+    setCity(c); savedCity.set(c); setPop(null);
+    toast(`Showing services in ${c.split(',')[0]}`);
   };
-  // Typing a city by hand: letters, spaces, dots and dashes; first letters made capital ("navi mumbai" → "Navi Mumbai")
+  // Typing a city by hand, optionally with the state: "navi mumbai, maharashtra" → "Navi Mumbai, Maharashtra"
   const [typedCity, setTypedCity] = useState('');
   const [typedErr, setTypedErr] = useState('');
   const submitTypedCity = (e: FormEvent) => {
     e.preventDefault();
-    const c = typedCity.trim().replace(/\s+/g, ' ');
-    if (!/^[\p{L}][\p{L} .'-]{1,39}$/u.test(c)) { setTypedErr('Please type a city name (letters only).'); return; }
+    const c = cleanTypedCity(typedCity);
+    if (!c) { setTypedErr('Please type a city name, e.g. "Pune" or "Pune, Maharashtra".'); return; }
     setTypedCity(''); setTypedErr('');
-    pickCity(c.replace(/(^|[\s-])(\p{L})/gu, (_m, p, ch: string) => p + ch.toUpperCase()));
+    pickCity(c);
   };
   // "Use my current location": the browser asks for permission, then we look up the city
   const [locating, setLocating] = useState(false);
@@ -158,7 +159,7 @@ export function Header() {
     setLocating(true); setLocateMsg('');
     const r = await detectCity();
     setLocating(false);
-    if (r.status === 'found') pickCity(r.city);
+    if (r.status === 'found') pickCity(cityLabel(r.city, r.state));
     else setLocateMsg(r.message);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // First time the picker opens with no city chosen yet: ask straight away
@@ -193,7 +194,7 @@ export function Header() {
             </button>
             <button className={`city-pill ${pop === 'city' ? 'open' : ''}`} aria-haspopup="listbox" aria-expanded={pop === 'city'}
               onClick={(e) => togglePop(e, 'city')}>
-              <Icon name="pin" /> {city} <Icon name="chevronDown" className="chev" />
+              <Icon name="pin" /> {cityName || 'Choose city'} <Icon name="chevronDown" className="chev" />
             </button>
           </div>
 
@@ -240,18 +241,18 @@ export function Header() {
                 <span><Icon name="pin" />{locating ? 'Finding your location…' : 'Use my current location'}</span>
               </button>
               <form className="city-type" onSubmit={submitTypedCity}>
-                <input value={typedCity} onChange={(e) => { setTypedCity(e.target.value); setTypedErr(''); }} placeholder="Or type your city" aria-label="Type your city" maxLength={40} autoComplete="address-level2" />
+                <input value={typedCity} onChange={(e) => { setTypedCity(e.target.value); setTypedErr(''); }} placeholder="Or type your city, state" aria-label="Type your city and state" maxLength={60} />
                 <button type="submit" disabled={!typedCity.trim()}>Set</button>
               </form>
               {typedErr && <p className="city-err" role="alert">{typedErr}</p>}
-              {cityList.map((c) => (
-                <button key={c} type="button" className={`city-opt ${c === city ? 'on' : ''}`} role="option" aria-selected={c === city} onClick={() => pickCity(c)}>
-                  <span>{c}</span>{c === city && <Icon name="check" />}
-                </button>
-              ))}
+              {cityChosen && (
+                <div className="city-opt on city-current" role="option" aria-selected="true">
+                  <span><b>{cityName}</b>{cityState && <small>{cityState}</small>}</span><Icon name="check" />
+                </div>
+              )}
               {locateMsg
-                ? <p className="city-note">{locateMsg} You can also pick a city from the list.</p>
-                : !cityChosen && !locating && <p className="city-note">Allow location to detect your city, or pick the city you'd like service in.</p>}
+                ? <p className="city-note">{locateMsg} You can also type your city above.</p>
+                : !cityChosen && !locating && <p className="city-note">Allow location to detect your city, or type the city you'd like service in.</p>}
             </div>
           )}
         </div>

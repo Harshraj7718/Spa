@@ -165,3 +165,8 @@
 .city-type button { padding: 0 14px; border-radius: 10px; background: var(--dark); color: #fff; font-weight: 600; font-size: 14px; }
 .city-type button:disabled { opacity: .45; cursor: default; }
 .city-err { padding: 0 18px 8px; font-size: 12.5px; color: #c0392b; }
+
+/* City picker: the customer's current City, State */
+.city-current { cursor: default; }
+.city-current span { display: grid; gap: 1px; }
+.city-current small { font-size: 12.5px; font-weight: 500; color: var(--muted); }

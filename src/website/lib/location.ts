@@ -5,7 +5,7 @@ import { api } from './api';
 
 export type CityState =
   | { status: 'idle' | 'asking' }
-  | { status: 'found'; city: string }
+  | { status: 'found'; city: string; state: string }
   | { status: 'denied' | 'failed' | 'unsupported'; message: string };
 
 function position(): Promise<GeolocationPosition> {
@@ -19,7 +19,7 @@ export async function detectCity(): Promise<Exclude<CityState, { status: 'idle' 
   try {
     const pos = await position();
     const r = await api.locate(pos.coords.latitude, pos.coords.longitude);
-    return r.city ? { status: 'found', city: r.city } : { status: 'failed', message: "We couldn't recognise your city." };
+    return r.city ? { status: 'found', city: r.city, state: r.state || '' } : { status: 'failed', message: "We couldn't recognise your city." };
   } catch (e) {
     const geo = e as GeolocationPositionError;
     if (geo && geo.code === 1) return { status: 'denied', message: 'Location is blocked. Allow it in your browser settings to detect your city.' };
@@ -36,4 +36,15 @@ export function useDetectedCity(): CityState & { retry: () => void } {
   }, []);
   useEffect(() => { detect(); }, [detect]);
   return { ...state, retry: detect };
+}
+
+/** "Pune" + "Maharashtra" → "Pune, Maharashtra" (the form saved in the browser and shown in the city picker) */
+export const cityLabel = (city: string, state = '') => (state && state !== city ? `${city}, ${state}` : city);
+
+/** Tidies typed text: "navi MUMBAI,  maharashtra" → "Navi Mumbai, Maharashtra". null if it isn't a place name. */
+export function cleanTypedCity(text: string): string | null {
+  const parts = text.split(',').map((p) => p.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  if (!parts.length || parts.length > 2 || !parts.every((p) => /^[\p{L}][\p{L} .'-]{1,39}$/u.test(p))) return null;
+  const title = (p: string) => p.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+  return parts.map(title).join(', ');
 }
