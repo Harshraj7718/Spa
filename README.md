@@ -1,7 +1,7 @@
 # AAPNA SPA – Spa Website
 
 The website and the admin dashboard are built with **React + TypeScript** (bundled by **Vite**).
-A small **Node.js** server (in the **`backend/`** folder) serves them, stores everything in **MongoDB**, and takes payments with **Cashfree** (Razorpay also supported).
+A small **Node.js** server (in the **`backend/`** folder) serves them, stores everything in **MongoDB**, and takes payments by **UPI QR** (customer uploads screenshot + UTR, admin verifies).
 
 ## Guides for each part
 
@@ -62,7 +62,7 @@ spa/
 | `/offers` | Offers |
 | `/bookings` | My Bookings |
 | `/login`, `/signup` | Log in / Create account (`?next=/bookings` returns there after login) |
-| `/payment-return` | Where Cashfree sends customers after paying (shows confirmed / failed) |
+| `/payment-return` | Old Cashfree return page (only for bookings started before the switch to UPI) |
 | `/admin` | Admin dashboard |
 
 Old addresses (`index.html`, `book-now.html`, `therapist.html?type=…&id=…`, `offers.html`, `login.html`…) redirect to the new ones automatically.
@@ -134,38 +134,27 @@ the server looks up the city on OpenStreetMap (only the city name is kept – ne
 If they block location, they can still log in normally (a *Try again* button is shown). Browsers only allow
 location on **https://** sites (and on localhost).
 
-## Online payments (Cashfree)
+## Online payments (UPI QR + screenshot / UTR)
 
-1. Put your keys in `.env` (see `.env.example`): `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_ENV=sandbox`.
-   Get them from the Cashfree Merchant Dashboard → **Developers → API Keys** (start with the **Test** keys).
-2. Restart the server (`npm start`) — it shows `Payments: Cashfree (SANDBOX test mode)`.
+1. **Admin → Contact → Business UPI ID**: enter your own UPI ID (e.g. `yourname@okhdfcbank`) and the payee name.
+   Until it is set, the Pay button says online payment isn't set up yet.
+2. That's it – no keys or gateway account needed.
 
 How it works:
-- **Pay Online** charges the treatment amount (minus any offer) **plus the ₹149 visiting / travel charge**; **Cash on Delivery** charges only the ₹149 visiting charge online and the treatment is paid in cash.
-  The server calculates the amount itself from `shared/catalog.json` – a customer can't change it.
-- The button saves the booking as *Awaiting payment* and sends the customer to Cashfree's secure page (UPI, cards, netbanking, wallets).
-- Afterwards Cashfree returns them to `/payment-return`. That page asks the server, the server asks **Cashfree** whether the order is
-  really `PAID` (and for the right amount), then marks the booking **Paid** – it appears in the admin instantly.
-- Failed or cancelled payments show "Payment not completed" to the customer and a ⚠️ in the admin's Activity feed.
-- If keys are missing or Cashfree is unreachable, the customer is offered **Confirm on WhatsApp** instead – never stuck.
+- **Pay Online** = treatment (minus any offer) **+ ₹149 visiting / travel charge**; **Cash on Delivery** = ₹149 now, treatment in cash.
+  The server calculates the amount itself – a customer can't change it.
+- The customer sees an **animated QR** for your UPI ID with the exact amount and booking ID filled in (plus a *Pay with UPI app*
+  button on phones and a 10-minute timer). The booking is saved as *Awaiting payment*.
+- After paying they tap **I have paid**, upload the **payment screenshot** and type the **12-digit UTR** (UPI reference number).
+  The booking becomes **Payment to verify** and appears in the admin straight away (with a ⏳ in the activity feed).
+- In **Admin → Bookings → To verify** you see the screenshot, UTR and amount. Check your bank / UPI app, then press
+  **✓ Payment received** (booking → Paid) or **Reject** with a reason (the customer is asked to pay and upload again).
+- A UTR can only be used for one booking, screenshots are private (admin only), and only the customer's own device/account can submit.
+- Logged-in customers who leave without paying get a *Payment pending* reminder under the bell with **Pay now**.
 
-**Testing in sandbox:** on Cashfree's page pay by UPI ID `testsuccess@gocash` (succeeds) or `testfailure@gocash` (fails),
-or use the test cards listed in Cashfree's docs. No real money moves.
+**Important:** a screenshot alone is not proof – always match the UTR and amount in your own bank app before approving.
 
-**Going live:** finish KYC in Cashfree, generate **Production** keys, set `CASHFREE_ENV=production` with those keys,
-and add your website domain under Developers → **Whitelisted domains** (Cashfree only redirects to approved domains). HTTPS is required.
-
-### Cashfree webhook (recommended)
-Records a payment even if the customer closes the browser before returning to your site.
-1. Cashfree Dashboard → **Developers → Webhooks → Add Webhook URL**: `https://YOUR-SITE/api/cashfree-webhook`, Payment events (success/failed).
-2. Nothing else to set – the server checks Cashfree's signature with your `CASHFREE_SECRET_KEY`.
-3. On Vercel also add `NODEJS_HELPERS=0` so the signature can be checked.
-
-Checkout and webhook can both report the same payment safely – it's recorded once.
-
-### Razorpay (optional alternative)
-Add `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` instead of the Cashfree keys (or set `PAYMENT_PROVIDER=razorpay` when both are present).
-Its webhook is `https://YOUR-SITE/api/razorpay-webhook` (events **payment.captured**, **payment.failed**) with its secret in `RAZORPAY_WEBHOOK_SECRET`.
+Older Cashfree/Razorpay code (`/payment-return`, webhooks) is kept only so bookings started before the switch can still finish.
 
 ## Accounts
 
@@ -180,7 +169,8 @@ Everything is stored in the `apkaspa` database:
 | `users` | Customer accounts |
 | `bookings` | Every booking: WhatsApp requests, online payments, cash on delivery |
 | `subscribers` | Newsletter sign-ups |
-| `settings` | Therapists, prices and offers (document `catalog`, edited in the admin) |
+| `settings` | Therapists, prices, offers and contact / UPI details (document `catalog`, edited in the admin) |
+| `proofs` | UPI payment screenshots (admin only) |
 | `events` | Activity log for the live feed (auto-deleted after 90 days) |
 
 **Admin dashboard — `/admin`:** sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` (10+ characters; session lasts 12 hours).

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { adminApi, day, rupee, when, type AdminBooking, type Status } from '../api';
 
-const FILTERS: [string, string][] = [['active', 'Active'], ['requested', 'Requested'], ['paid', 'Paid'], ['confirmed', 'Confirmed'], ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['', 'All']];
+const FILTERS: [string, string][] = [['active', 'Active'], ['payment_submitted', 'To verify'], ['requested', 'Requested'], ['paid', 'Paid'], ['confirmed', 'Confirmed'], ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['', 'All']];
 const STATUS_OPTIONS: [Status, string][] = [['requested', 'Requested'], ['paid', 'Paid'], ['confirmed', 'Confirmed'], ['completed', 'Completed'], ['cancelled', 'Cancelled']];
 
 function Payment({ p }: { p: NonNullable<AdminBooking['payment']> }) {
@@ -9,6 +9,24 @@ function Payment({ p }: { p: NonNullable<AdminBooking['payment']> }) {
     return <><b>Cash on delivery</b><small>{p.paymentId ? `Visit fee ${rupee(p.paidOnline)} paid` : `Visit fee ${rupee(p.visitCharge || p.paidOnline)}`} · {rupee(p.cashOnService)} cash</small></>;
   }
   return <><b>{p.paymentId ? `Paid ${rupee(p.paidOnline)}` : `${rupee(p.total ?? p.paidOnline)} online`}</b><small>{p.paymentId || 'not paid yet'}</small></>;
+}
+
+/** UPI payment waiting for the admin: screenshot, UTR, amount, and Approve / Reject */
+function VerifyBox({ b, busy, onVerify }: { b: AdminBooking; busy: boolean; onVerify: (action: 'approve' | 'reject') => void }) {
+  const p = b.payment || {};
+  return (
+    <div className="verify-box">
+      <b>Check your bank app for {rupee(p.paidOnline)}</b>
+      <small>UTR <span className="mono">{p.utr}</span>{p.submittedAt ? ` · ${when(p.submittedAt)}` : ''}</small>
+      {p.proofId && <a href={adminApi.proofUrl(p.proofId)} target="_blank" rel="noopener" className="proof-link">
+        <img src={adminApi.proofUrl(p.proofId)} alt={`Payment screenshot for ${b.bookingId}`} loading="lazy" />
+      </a>}
+      <div className="verify-actions">
+        <button className="btn primary" disabled={busy} onClick={() => onVerify('approve')}>✓ Payment received</button>
+        <button className="btn" disabled={busy} onClick={() => onVerify('reject')}>Reject</button>
+      </div>
+    </div>
+  );
 }
 
 /** Bookings tab. Everything shown was typed by customers – React escapes it, so it can't run as code. */
@@ -41,6 +59,25 @@ export function BookingsPanel({ refreshKey, onError, toast }: { refreshKey: numb
       const { booking } = await adminApi.setStatus(b.bookingId, status);
       setRows((rs) => rs && rs.map((r) => (r.bookingId === b.bookingId ? { ...r, status: booking.status } : r)));
       toast(`${b.bookingId} → ${STATUS_OPTIONS.find(([v]) => v === status)?.[1]}`);
+    } catch (err) {
+      onError(err);
+    } finally {
+      setSaving('');
+    }
+  };
+
+  const verify = async (b: AdminBooking, action: 'approve' | 'reject') => {
+    let reason = '';
+    if (action === 'reject') {
+      const r = window.prompt(`Reject the payment for ${b.bookingId}? The customer will be asked to pay again.\nReason (shown to the customer):`, 'Payment not received');
+      if (r === null) return;
+      reason = r;
+    }
+    setSaving(b.bookingId);
+    try {
+      const { booking } = await adminApi.verifyPayment(b.bookingId, action, reason);
+      setRows((rs) => rs && (filter === 'payment_submitted' ? rs.filter((r) => r.bookingId !== b.bookingId) : rs.map((r) => (r.bookingId === b.bookingId ? booking : r))));
+      toast(action === 'approve' ? `${b.bookingId} marked Paid ✓` : `${b.bookingId}: payment rejected`);
     } catch (err) {
       onError(err);
     } finally {
@@ -82,12 +119,16 @@ export function BookingsPanel({ refreshKey, onError, toast }: { refreshKey: numb
                     {c.landmark && <small>Near {c.landmark}</small>}
                     {pin && <small><a href={`https://maps.google.com/?q=${encodeURIComponent(pin)}`} target="_blank" rel="noopener">Open map pin ↗</a></small>}
                   </td>
-                  <td data-label="Payment"><Payment p={p} />{p.referral && <small>Code {p.referral} (−{rupee(p.discount)})</small>}</td>
+                  <td data-label="Payment">
+                    <Payment p={p} />{p.referral && <small>Code {p.referral} (−{rupee(p.discount)})</small>}
+                    {b.status === 'payment_submitted' && <VerifyBox b={b} busy={saving === b.bookingId} onVerify={(a) => verify(b, a)} />}
+                    {b.status !== 'payment_submitted' && p.gateway === 'upi' && p.paymentId && p.proofId && <small><a href={adminApi.proofUrl(p.proofId)} target="_blank" rel="noopener">View payment screenshot ↗</a></small>}
+                  </td>
                   <td data-label="Status">
-                    <select className={`status-select ${b.status}`} aria-label={`Status for ${b.bookingId}`} value={b.status} disabled={saving === b.bookingId}
+                    {b.status === 'payment_submitted' ? <span className="status-select payment_submitted">Payment to verify</span> : <select className={`status-select ${b.status}`} aria-label={`Status for ${b.bookingId}`} value={b.status} disabled={saving === b.bookingId}
                       onChange={(e) => changeStatus(b, e.target.value as Status)}>
                       {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
+                    </select>}
                   </td>
                 </tr>
               );

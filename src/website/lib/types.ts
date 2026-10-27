@@ -1,4 +1,4 @@
-export type BookingStatus = 'requested' | 'pending_payment' | 'paid' | 'confirmed' | 'completed' | 'cancelled';
+export type BookingStatus = 'requested' | 'pending_payment' | 'payment_submitted' | 'paid' | 'confirmed' | 'completed' | 'cancelled';
 export type PayMethod = 'online' | 'cod';
 
 export interface User {
@@ -22,6 +22,7 @@ export interface CustomerBooking {
     total?: number;
     referral?: string;
     paymentId?: string;
+    utr?: string;
   };
   customer: { stay?: string; date?: string; time?: string; address?: string };
 }

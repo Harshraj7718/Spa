@@ -21,6 +21,7 @@ function slotDate(b: CustomerBooking): Date {
 
 const STATUS: Record<string, [string, string]> = {
   requested: ['requested', 'Requested'],
+  payment_submitted: ['requested', 'Verifying payment'],
   paid: ['paid', 'Confirmed'],
   confirmed: ['paid', 'Confirmed'],
   completed: ['done', 'Completed'],
@@ -32,6 +33,7 @@ function PayLine({ b }: { b: CustomerBooking }) {
   const p = b.payment || {};
   const paidOnline = Boolean(p.paymentId) || b.status === 'paid';
   if (b.status === 'cancelled' && !paidOnline) return <>No payment due</>;
+  if (b.status === 'payment_submitted') return <>Paid <b>{rupee(p.paidOnline || 0)}</b> by UPI · verifying{p.utr ? <> (UTR <span className="allow-copy">{p.utr}</span>)</> : ''}</>;
   if (!paidOnline && b.status !== 'requested') return <>Total <b>{rupee(p.total || 0)}</b> · pay as agreed on WhatsApp</>;
   if (!paidOnline) {
     return p.method === 'cod'

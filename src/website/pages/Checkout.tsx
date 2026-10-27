@@ -3,12 +3,11 @@ import { Link, useParams } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { Photo } from '../components/Photo';
 import { MapPicker, type LatLng } from '../components/MapPicker';
-import { api, ApiError, type CashfreeMode, type RazorpayResponse } from '../lib/api';
-import { loadRazorpay } from '../lib/razorpay';
-import { loadCashfree } from '../lib/cashfree';
-import { copyText, useBodyClass, useEscape, useTitle } from '../lib/hooks';
+import { UpiPay, type UpiPayment } from '../components/UpiPay';
+import { api, ApiError } from '../lib/api';
+import { copyText, useBodyClass, useTitle } from '../lib/hooks';
 import { favourite, getDeviceId, savedOffer } from '../lib/storage';
-import { hourLabel, longDate, rupee, shortDate, toISODate } from '../lib/format';
+import { hourLabel, rupee, shortDate, toISODate } from '../lib/format';
 import type { BookingDetails, PayMethod } from '../lib/types';
 import { photoLabel, photoUrl, type Therapist } from '../../../shared/catalog';
 import { useCatalog } from '../lib/catalog';
@@ -22,7 +21,6 @@ const FLOORS = ['Ground Floor', '1st Floor', '2nd Floor', '3rd Floor', '4th Floo
 
 type Stay = 'Home Stay' | 'Hotel Stay';
 type Errors = Partial<Record<'time' | 'address' | 'mobile' | 'name', boolean>>;
-interface Sheet { bookingId: string; paymentId: string }
 
 function firstDay() {
   const d = new Date();
@@ -48,7 +46,7 @@ export default function Checkout() {
 }
 
 function CheckoutPage({ t }: { t: Therapist }) {
-  const { BUSINESS_WHATSAPP, VISIT_CHARGE, discountFor } = useCatalog();
+  const { VISIT_CHARGE, discountFor } = useCatalog();
   useTitle(`Book ${t.name} – AAPNA SPA`);
 
   // ---- Form state ----
@@ -71,8 +69,9 @@ function CheckoutPage({ t }: { t: Therapist }) {
   const [errors, setErrors] = useState<Errors>({});
   const [locating, setLocating] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [gateway, setGateway] = useState<{ provider: 'cashfree' | 'razorpay' | null; mode: CashfreeMode }>({ provider: null, mode: 'sandbox' });
-  const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [upi, setUpi] = useState<UpiPayment | null>(null);
+  const [upiOpen, setUpiOpen] = useState(false);
+  const upiFor = useRef(''); // booking details the current UPI payment was made for
   const [fav, setFav] = useState(() => favourite.has(`${t.type}:${t.name}`));
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(true);
@@ -84,17 +83,8 @@ function CheckoutPage({ t }: { t: Therapist }) {
 
   const treatment = Math.max(t.price - discount, 0);
   const hotel = stay === 'Hotel Stay';
-  const gatewayName = gateway.provider === 'razorpay' ? 'Razorpay' : 'Cashfree (UPI, cards, netbanking)';
+  const gatewayName = 'UPI (Google Pay, PhonePe, Paytm, BHIM)';
 
-  // Customer pressed Back on Cashfree's page: the browser may restore this page as it was, so re-enable Pay
-  useEffect(() => {
-    const onShow = (e: PageTransitionEvent) => { if (e.persisted) setPaying(false); };
-    window.addEventListener('pageshow', onShow);
-    return () => window.removeEventListener('pageshow', onShow);
-  }, []);
-  useEffect(() => {
-    api.config().then((c) => setGateway({ provider: c.provider || (c.razorpay ? 'razorpay' : null), mode: c.cashfreeMode || 'sandbox' })).catch(() => {});
-  }, []);
   useLayoutEffect(() => { const p = aboutRef.current; if (p) setAboutLong(p.scrollHeight > p.clientHeight + 2); }, [t.about]);
 
   // ---- Offer codes ----
@@ -164,94 +154,26 @@ function CheckoutPage({ t }: { t: Therapist }) {
     return !first;
   };
 
-  // ---- Summary rows (sheet + WhatsApp message) ----
-  const rows = (): [string, string][] => {
-    const r: [string, string][] = [
-      ['Therapist', `${t.name} (${t.speciality})`],
-      ['Service', stay],
-      ['Date & Time', `${longDate(date)}, ${time}`],
-      ['Name', name.trim()],
-      ['Mobile', '+91 ' + mobile],
-      ['Address', [flat.trim(), floor, address.trim()].filter(Boolean).join(', ')],
-    ];
-    if (landmark.trim()) r.push(['Landmark', landmark.trim()]);
-    if (pin) r.push(['Map pin', `https://maps.google.com/?q=${pin[0].toFixed(6)},${pin[1].toFixed(6)}`]);
-    if (code) r.push(['Offer code', `${code} (−${rupee(discount)})`]);
-    if (pay === 'online') r.push(['Payment', 'Pay Online'], ['Visiting / travel charge', rupee(VISIT_CHARGE)], ['Total', rupee(treatment + VISIT_CHARGE)]);
-    else r.push(['Payment', 'Cash on Delivery'], ['Pay now (visiting)', rupee(VISIT_CHARGE)], ['Cash after service', rupee(treatment)]);
-    return r;
-  };
-  const waLink = (prefix: string) => {
-    const msg = `${prefix} – AAPNA SPA\n\n` + rows().map(([k, v]) => `${k}: ${v}`).join('\n');
-    return `https://wa.me/${BUSINESS_WHATSAPP}?text=${encodeURIComponent(msg)}`;
-  };
-
-  // ---- Pay: always through the payment gateway ----
-  const PAY_DOWN = 'Online payment is not available right now. Please try again in a minute.';
-  const startPayment = async () => {
-    setPaying(true);
+  // ---- Pay: UPI QR for the business UPI ID, then screenshot + UTR (see components/UpiPay.tsx) ----
+  const onPay = async () => {
+    if (!validate() || !pay) return;
     const d = details();
-    let opened = false; // once Razorpay's window is open (or we're leaving for Cashfree), the button is reset elsewhere
+    const key = JSON.stringify({ ...d, deviceId: '' });
+    // Closed the QR and tapped Pay again without changing anything: reopen the same booking instead of making a new one
+    if (upi && upiFor.current === key) { setUpiOpen(true); return; }
+    setPaying(true);
     try {
-      // Tapped before the page knew which gateway to use: ask the server now
-      let gw = gateway;
-      if (!gw.provider) {
-        const c = await api.config();
-        gw = { provider: c.provider || (c.razorpay ? 'razorpay' : null), mode: c.cashfreeMode || 'sandbox' };
-        setGateway(gw);
-      }
-      if (!gw.provider) { alert('Online payment is not set up on this website yet. Please try again later.'); return; }
-      if (gw.provider === 'cashfree') {
-        const cf = await loadCashfree(gw.mode);
-        if (!cf) { alert('Could not open the payment page. Please check your internet connection and try again.'); return; }
-        const order = await api.createOrder(d);
-        if (order.provider !== 'cashfree') throw new ApiError('Please refresh the page and try again.', 409);
-        // Opens Cashfree's secure payment page; afterwards Cashfree sends the customer to /payment-return
-        const result = await cf.checkout({ paymentSessionId: order.paymentSessionId, redirectTarget: '_self' });
-        if (result?.error) alert('Payment could not start: ' + (result.error.message || 'please try again.'));
-        else opened = true; // leaving for Cashfree – keep the button disabled
-        return;
-      }
-      if (!(await loadRazorpay()) || !window.Razorpay) { alert('Could not open the payment window. Please check your internet connection and try again.'); return; }
       const order = await api.createOrder(d);
-      if (order.provider !== 'razorpay') throw new ApiError('Please refresh the page and try again.', 409);
-      const rzp = new window.Razorpay({
-        key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'AAPNA SPA',
-        description: pay === 'online' ? `${t.name} – ${t.speciality}` : `Visiting charge – ${t.name}`,
-        prefill: { name: d.customer.name, contact: '+91' + d.customer.mobile },
-        notes: { booking_id: order.bookingId },
-        theme: { color: '#6e8240' },
-        handler: (resp) => { verify(resp); },
-        modal: { ondismiss: () => setPaying(false) },
-      });
-      rzp.on('payment.failed', (resp) => { setPaying(false); alert('Payment failed: ' + (resp.error?.description || 'please try again.')); });
-      rzp.open();
-      opened = true;
+      upiFor.current = key;
+      setUpi(order);
+      setUpiOpen(true);
     } catch (err) {
       const e = err as ApiError;
-      alert(e.code === 'payment_unavailable' || e.status >= 500 ? PAY_DOWN : e.message);
-    } finally {
-      if (!opened) setPaying(false);
-    }
-  };
-  const verify = async (resp: RazorpayResponse) => {
-    try {
-      const r = await api.verifyPayment(resp);
-      setSheet({ bookingId: r.bookingId, paymentId: resp.razorpay_payment_id });
-    } catch {
-      alert(`We received your payment (ID ${resp.razorpay_payment_id}) but could not confirm it automatically. Please share this ID with us on WhatsApp.`);
+      alert(e.code === 'payment_unavailable' ? e.message : e.status >= 500 || e.status === 0 ? 'Online payment is not available right now. Please try again in a minute.' : e.message);
     } finally {
       setPaying(false);
     }
   };
-  const onPay = () => {
-    if (!validate() || !pay) return;
-    startPayment();
-  };
-
-  const closeSheet = useCallback(() => setSheet(null), []);
-  useEscape(sheet !== null, closeSheet);
-  useEffect(() => { document.body.style.overflow = sheet ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [sheet]);
 
   const share = async () => {
     const url = location.href;
@@ -461,24 +383,7 @@ function CheckoutPage({ t }: { t: Therapist }) {
         </button>
       </div>
 
-      {/* Payment received (Razorpay window; Cashfree shows this on /payment-return) */}
-      {sheet && (
-        <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
-          <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-            <button className="sheet-close" aria-label="Close" onClick={closeSheet}>×</button>
-            <h3 id="sheetTitle">Booking confirmed 🎉</h3>
-            <div>
-              <div className="success-box"><b className="allow-copy">Booking ID: {sheet.bookingId}</b><small className="allow-copy">Payment ID: {sheet.paymentId}</small></div>
-              {rows().map(([k, v]) => <div key={k} className="sum-row"><span>{k}</span><span>{v}</span></div>)}
-            </div>
-            <Link className="btn btn-primary block" to="/bookings">View my bookings <span>→</span></Link>
-            <p className="hint center">
-              Payment received – your booking is confirmed. Our therapist will reach you at the chosen time.{' '}
-              <a href={waLink(`Paid booking ${sheet.bookingId} (payment ${sheet.paymentId})`)} target="_blank" rel="noopener">Need help? WhatsApp us</a>
-            </p>
-          </div>
-        </div>
-      )}
+      {upi && upiOpen && <UpiPay payment={upi} onClose={() => setUpiOpen(false)} />}
     </>
   );
 }

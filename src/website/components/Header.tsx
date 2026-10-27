@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { useEscape } from '../lib/hooks';
 import { savedCity } from '../lib/storage';
 import { api, type AppNotification } from '../lib/api';
-import { loadCashfree } from '../lib/cashfree';
+import { UpiPay, type UpiPayment } from './UpiPay';
 import { rupee } from '../lib/format';
 import { cityLabel, cleanTypedCity, detectCity } from '../lib/location';
 
@@ -81,18 +81,19 @@ export function Header() {
     setSeen(ids);
     try { localStorage.setItem(READ_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
   };
-  // "Pay now": reopen Cashfree for the same booking and amount
+  // "Pay now": show the UPI QR again for the same booking and amount
+  const [upi, setUpi] = useState<UpiPayment | null>(null);
   const payNow = async (n: AppNotification) => {
     setPayingId(n.bookingId);
     try {
       const r = await api.resumePayment(n.bookingId);
-      if (r.status === 'paid' || !r.paymentSessionId) { toast('This booking is already paid 🎉'); loadNotes(); setPayingId(''); return; }
-      const cf = await loadCashfree(r.mode || 'sandbox');
-      if (!cf) throw new Error('Could not open the payment page. Please check your internet connection.');
-      const result = await cf.checkout({ paymentSessionId: r.paymentSessionId, redirectTarget: '_self' });
-      if (result?.error) throw new Error(result.error.message || 'Payment could not start. Please try again.');
+      if (r.status === 'payment_submitted') toast('Your payment proof is being verified ✓');
+      else if (r.status === 'paid') toast('This booking is already paid 🎉');
+      else if (r.upiId && r.amount !== undefined) { setPop(null); setUpi({ bookingId: r.bookingId, amount: r.amount, upiId: r.upiId, payeeName: r.payeeName || 'AAPNA SPA' }); }
+      else toast('This booking cannot be paid online. Please contact us on WhatsApp.');
     } catch (e) {
       toast((e as Error).message);
+    } finally {
       setPayingId('');
       loadNotes();
     }
@@ -214,7 +215,9 @@ export function Header() {
                     <span className="notif-ic"><Icon name="check" /></span>
                     <div className="notif-text">
                       <div className="notif-top"><b>Payment pending</b><span className="notif-id">#{n.bookingId.slice(-6)}</span></div>
-                      <p>Complete the payment for {n.speciality || n.therapist || 'your session'} to secure your slot.</p>
+                      <p>{n.rejected
+                        ? <>We couldn't verify your last payment ({n.rejected}). Please pay again and upload the proof.</>
+                        : <>Complete the payment for {n.speciality || n.therapist || 'your session'} to secure your slot.</>}</p>
                       <div className="notif-meta">
                         {slotLabel(n) && <span className="notif-when">{slotLabel(n)}</span>}
                         <button type="button" className="notif-pay" disabled={payingId === n.bookingId} onClick={() => payNow(n)}>
@@ -286,6 +289,7 @@ export function Header() {
           )))}
         </nav>
       </aside>
+      {upi && <UpiPay payment={upi} onClose={() => { setUpi(null); loadNotes(); }} />}
     </>
   );
 }

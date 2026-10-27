@@ -1,5 +1,5 @@
 // Admin calls to backend/server.js (/api/admin/*). A 401 means the admin session ended.
-export type Status = 'requested' | 'pending_payment' | 'paid' | 'confirmed' | 'completed' | 'cancelled';
+export type Status = 'requested' | 'pending_payment' | 'payment_submitted' | 'paid' | 'confirmed' | 'completed' | 'cancelled';
 
 export interface AdminBooking {
   _id: string;
@@ -11,6 +11,7 @@ export interface AdminBooking {
   payment?: {
     method?: 'online' | 'cod'; price?: number; discount?: number; referral?: string; paidOnline?: number;
     cashOnService?: number; total?: number; visitCharge?: number; paymentId?: string;
+    gateway?: string; utr?: string; proofId?: string; submittedAt?: string; rejected?: string;
   };
   customer?: {
     name?: string; mobile?: string; stay?: string; date?: string; time?: string; address?: string;
@@ -41,7 +42,7 @@ export interface AdminTherapist {
   experience?: string; specializes?: string; languages?: string; about?: string; hidden?: boolean;
 }
 export interface AdminOffer { code: string; title: string; desc: string; kind: 'percent' | 'flat'; value: number; max?: number; hidden?: boolean; disabled?: boolean }
-export interface AdminContact { whatsapp: string; phone: string; instagram: string; email: string; address: string; hours: string }
+export interface AdminContact { whatsapp: string; phone: string; instagram: string; email: string; address: string; hours: string; upiId: string; upiName: string }
 export interface AdminCatalog { therapists: Record<TherapistType, AdminTherapist[]>; offers: AdminOffer[]; contact: AdminContact; version: string }
 
 export class SessionEnded extends Error {}
@@ -60,6 +61,10 @@ export const adminApi = {
   logout: () => call<{ ok: true }>('/api/admin/logout', { method: 'POST' }),
   summary: () => call<Summary>('/api/admin/summary'),
   bookings: (status: string, q: string) => call<{ bookings: AdminBooking[] }>('/api/admin/bookings?' + new URLSearchParams({ status, q })),
+  /** UPI payment checked in the bank app: approve → Paid, reject → customer pays / submits again */
+  verifyPayment: (bookingId: string, action: 'approve' | 'reject', reason = '') =>
+    call<{ booking: AdminBooking }>(`/api/admin/bookings/${encodeURIComponent(bookingId)}/verify`, { method: 'POST', body: JSON.stringify({ action, reason }) }),
+  proofUrl: (proofId: string) => `/api/admin/proofs/${encodeURIComponent(proofId)}`,
   setStatus: (bookingId: string, status: Status) =>
     call<{ booking: AdminBooking }>(`/api/admin/bookings/${encodeURIComponent(bookingId)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   customers: () => call<{ customers: Customer[] }>('/api/admin/customers'),

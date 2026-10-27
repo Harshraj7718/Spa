@@ -52,6 +52,8 @@ async function connect(uri) {
     col('bookings').createIndex({ 'payment.orderId': 1 }, { sparse: true }),
     col('bookings').createIndex({ deviceHash: 1 }),
     col('bookings').createIndex({ userId: 1 }),
+    col('bookings').createIndex({ 'payment.utr': 1 }, { unique: true, partialFilterExpression: { 'payment.utr': { $type: 'string' } } }),
+    col('proofs').createIndex({ bookingId: 1 }),
     col('bookings').createIndex({ status: 1, createdAt: -1 }),
     col('subscribers').createIndex({ email: 1 }, { unique: true }),
     col('events').createIndex({ at: 1 }, { expireAfterSeconds: 90 * 86400 }),

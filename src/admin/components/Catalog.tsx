@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { shrinkImage } from '../../website/lib/image';
 import { adminApi, rupee, type AdminCatalog, type AdminContact, type AdminOffer, type AdminTherapist, type TherapistType } from '../api';
 
 type Props = { refreshKey: number; onError: (e: unknown) => void; toast: (m: string, err?: boolean) => void };
@@ -11,24 +12,6 @@ const TYPES = Object.keys(TYPE_LABEL) as TherapistType[];
  * Returns null when it isn't a usable link.
  */
 export const isUploaded = (v: string) => /^\/api\/photos\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(String(v || '').trim());
-
-/** Shrinks a photo to at most 1000 px on its longest side (JPEG) so it uploads and loads quickly. */
-async function shrinkImage(file: File): Promise<Blob> {
-  let img: ImageBitmap;
-  try { img = await createImageBitmap(file); } catch { throw new Error("This photo format can't be read. Please use a JPG or PNG photo."); }
-  const scale = Math.min(1, 1000 / Math.max(img.width, img.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#fff'; // transparent PNGs get a white background
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  img.close();
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-  if (!blob) throw new Error('Could not prepare the photo. Please try another one.');
-  return blob;
-}
 
 export function photoSrc(v: string): string | null {
   const s = v.trim();
@@ -398,6 +381,12 @@ export function ContactPanel(props: Props) {
           </Field>
           <Field label="Address (footer)"><input maxLength={120} value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Vijay Nagar, Indore" /></Field>
           <Field label="Opening hours (footer)"><input maxLength={60} value={form.hours} onChange={(e) => set('hours', e.target.value)} placeholder="Daily, 10 AM - 10 PM" /></Field>
+          <Field label="Business UPI ID (payments)" hint={form.upiId ? 'Customers pay this UPI ID by QR, then upload a screenshot + UTR for you to verify.' : 'Online payment is OFF until this is set. Example: yourname@okhdfcbank'}>
+            <input value={form.upiId || ''} onChange={(e) => set('upiId', e.target.value.trim())} placeholder="yourname@okhdfcbank" autoCapitalize="off" spellCheck={false} />
+          </Field>
+          <Field label="UPI payee name" hint="Shown on the QR and in the customer's UPI app">
+            <input maxLength={60} value={form.upiName || ''} onChange={(e) => set('upiName', e.target.value)} placeholder="AAPNA SPA" />
+          </Field>
         </div>
         <footer>
           <button type="button" className="btn" disabled={!changed || saving} onClick={() => setDraft(null)}>Undo changes</button>

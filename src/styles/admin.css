@@ -286,3 +286,12 @@ tr.dim td { opacity: .55; }
 .upload-box .btn.busy { opacity: .6; cursor: wait; }
 .upload-box small { font-size: 12px; color: var(--muted); line-height: 1.45; }
 .upload-box small.bad { color: var(--red); }
+
+/* UPI payments waiting for verification */
+.status-select.payment_submitted { display: inline-block; background: #fff3d6; border-color: #f0d38a; color: #8a5a00; cursor: default; }
+.verify-box { margin-top: 8px; padding: 10px; border-radius: 12px; background: #fffaf0; border: 1px solid #f0d38a; display: grid; gap: 6px; max-width: 240px; }
+.verify-box b { font-size: 13px; }
+.mono { font-family: ui-monospace, Consolas, monospace; letter-spacing: .5px; }
+.proof-link img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+.verify-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.verify-actions .btn { padding: 7px 12px; font-size: 12.5px; }

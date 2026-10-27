@@ -41,13 +41,8 @@ const CF_APP_ID = process.env.CASHFREE_APP_ID || '';
 const CF_SECRET = process.env.CASHFREE_SECRET_KEY || '';
 const CF_LIVE = String(process.env.CASHFREE_ENV || '').toLowerCase() === 'production';
 const CASHFREE_ENABLED = Boolean(CF_APP_ID && CF_SECRET);
-// Which gateway the Pay button uses. Set PAYMENT_PROVIDER=razorpay or cashfree to choose when both have keys.
-const PROVIDER = (() => {
-  const want = String(process.env.PAYMENT_PROVIDER || '').toLowerCase();
-  if (want === 'razorpay' && RAZORPAY_ENABLED) return 'razorpay';
-  if (want === 'cashfree' && CASHFREE_ENABLED) return 'cashfree';
-  return CASHFREE_ENABLED ? 'cashfree' : RAZORPAY_ENABLED ? 'razorpay' : '';
-})();
+// New bookings are paid by UPI QR (business UPI ID in Admin → Contact). The Cashfree / Razorpay keys above are
+// only used to finish bookings that were already started with them (return page, webhooks, Pay now).
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_ENABLED = ADMIN_PASSWORD.length >= 10;
@@ -154,7 +149,9 @@ const text = (v, max, label, required = false) => {
  * Contact details shown on the website (WhatsApp, phone, Instagram, email, address, hours).
  * Edited in Admin → Contact. Anything left empty is hidden on the website.
  */
-const DEFAULT_CONTACT = { whatsapp: '', phone: '', instagram: '', email: '', address: '', hours: '' };
+const DEFAULT_CONTACT = { whatsapp: '', phone: '', instagram: '', email: '', address: '', hours: '', upiId: '', upiName: '' };
+// Who the customer pays by UPI (shown on the QR)
+const upiPayee = (c) => ({ upiId: c.upiId, payeeName: c.upiName || 'AAPNA SPA' });
 function contactOf(c) {
   // Not saved from the admin yet: use the starting values in shared/catalog.json
   let start = {};
@@ -184,6 +181,12 @@ function cleanContact(input = {}) {
     email,
     address: text(input.address, 120, 'Address'),
     hours: text(input.hours, 60, 'Opening hours'),
+    upiId: (() => {
+      const u = String(input.upiId || '').trim().toLowerCase();
+      if (u && !/^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/.test(u)) throw new Error('UPI ID: enter it like yourname@okhdfcbank or 9876543210@ybl.');
+      return u;
+    })(),
+    upiName: text(input.upiName, 60, 'UPI payee name'),
   };
 }
 
@@ -625,7 +628,7 @@ function bookingForCustomer(b) {
     therapist: { name: b.therapist?.name, speciality: b.therapist?.speciality },
     payment: {
       method: b.payment?.method, paidOnline: b.payment?.paidOnline || 0, cashOnService: b.payment?.cashOnService || 0,
-      total: b.payment?.total, referral: b.payment?.referral, paymentId: b.payment?.paymentId,
+      total: b.payment?.total, referral: b.payment?.referral, paymentId: b.payment?.paymentId, utr: b.payment?.utr,
     },
     customer: {
       stay: b.customer?.stay, date: b.customer?.date, time: b.customer?.time,
@@ -653,7 +656,7 @@ function istToday() {
 }
 
 const ADMIN_STATUSES = ['requested', 'paid', 'confirmed', 'completed', 'cancelled'];
-const STATUS_LABEL = { requested: 'Requested', pending_payment: 'Awaiting payment', paid: 'Paid', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' };
+const STATUS_LABEL = { requested: 'Requested', pending_payment: 'Awaiting payment', payment_submitted: 'Payment to verify', paid: 'Paid', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' };
 
 // ---------- Routes ----------
 async function handle(req, res) {
@@ -661,10 +664,8 @@ async function handle(req, res) {
   const { pathname } = url;
 
   if (pathname === '/api/config' && req.method === 'GET') {
-    return sendJSON(res, 200, {
-      provider: PROVIDER || null, razorpay: PROVIDER === 'razorpay', keyId: PROVIDER === 'razorpay' ? KEY_ID : null,
-      cashfreeMode: PROVIDER === 'cashfree' ? (CF_LIVE ? 'production' : 'sandbox') : null,
-    });
+    const upi = Boolean(contactOf(await readCatalog()).upiId);
+    return sendJSON(res, 200, { provider: upi ? 'upi' : null, razorpay: false, keyId: null, cashfreeMode: null });
   }
 
   if (pathname === '/api/catalog' && req.method === 'GET') {
@@ -815,7 +816,7 @@ async function handle(req, res) {
     const seen = new Set();
     const notifications = [];
     for (const b of mine) {
-      if (b.status !== 'pending_payment' || b.payment?.gateway !== 'cashfree') continue;
+      if (b.status !== 'pending_payment' || !['cashfree', 'upi'].includes(b.payment?.gateway)) continue;
       if (slotStart(b) < Date.now()) continue; // the time has passed
       const k = slotKey(b);
       if (covered.has(k) || seen.has(k)) continue; // paid already, or an older attempt for the same slot
@@ -824,6 +825,7 @@ async function handle(req, res) {
         id: `pay:${b.bookingId}`, type: 'payment_pending', bookingId: b.bookingId,
         therapist: b.therapist?.name, speciality: b.therapist?.speciality,
         date: b.customer?.date, time: b.customer?.time, amount: b.payment?.paidOnline, method: b.payment?.method,
+        rejected: b.payment?.rejected || '',
         createdAt: iso(b.createdAt),
       });
     }
@@ -832,12 +834,19 @@ async function handle(req, res) {
 
   // Pay for an unpaid booking again (from the notification). Only the customer who made it can do this.
   if (pathname === '/api/resume-payment' && req.method === 'POST') {
-    if (!CASHFREE_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     const user = await currentUser(req);
     if (!user) return sendJSON(res, 401, { error: 'Please log in to complete this payment.' });
     const bookingId = clip((await readBody(req)).bookingId, 40);
     const b = await col('bookings').findOne({ bookingId, userId: String(user._id) });
     if (!b) return sendJSON(res, 404, { error: 'Booking not found.' });
+    if (b.payment?.gateway === 'upi') {
+      if (b.status !== 'pending_payment') return sendJSON(res, 200, { status: b.status === 'payment_submitted' ? 'payment_submitted' : 'paid', bookingId });
+      if (slotStart(b) < Date.now()) return sendJSON(res, 400, { error: 'This time slot has passed. Please make a new booking.' });
+      const contact = contactOf(await readCatalog());
+      if (!contact.upiId) return sendJSON(res, 503, { error: 'Online payment is not set up yet. Please contact us on WhatsApp.' });
+      return sendJSON(res, 200, { status: 'pending', provider: 'upi', bookingId, amount: b.payment.paidOnline, ...upiPayee(contact) });
+    }
+    if (!CASHFREE_ENABLED) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     if (b.payment?.gateway !== 'cashfree') return sendJSON(res, 400, { error: 'This booking cannot be paid online. Please contact us.' });
     if (b.status !== 'pending_payment') return sendJSON(res, 200, { status: 'paid', bookingId });
     if (slotStart(b) < Date.now()) return sendJSON(res, 400, { error: 'This time slot has passed. Please make a new booking.' });
@@ -884,7 +893,6 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/create-order' && req.method === 'POST') {
-    if (!PROVIDER) return sendJSON(res, 503, { error: 'Online payment is not set up yet.' });
     const body = await readBody(req);
     const q = await quote(body);
     const customer = cleanCustomer(body.customer);
@@ -904,55 +912,56 @@ async function handle(req, res) {
       customer,
     });
 
-    if (PROVIDER === 'cashfree') {
-      // Save first (order id = booking id), so the webhook can always find it
-      await col('bookings').insertOne(newBooking(bookingId, 'cashfree'));
-      let order;
-      try {
-        order = await cashfree('POST', '/orders', {
-          order_id: bookingId,
-          order_amount: q.payNow,
-          order_currency: 'INR',
-          customer_details: {
-            customer_id: user ? String(user._id) : `guest_${customer.mobile}`,
-            customer_name: customer.name, customer_phone: customer.mobile,
-            ...(user?.email ? { customer_email: user.email } : {}),
-          },
-          order_meta: { return_url: `${siteOrigin(req)}/payment-return?order_id={order_id}` },
-          order_note: `${body.pay === 'online' ? 'Treatment' : 'Visiting charge'} – ${q.therapist.name}`.slice(0, 200),
-          order_tags: { therapist: q.therapist.name.slice(0, 50), slot: `${customer.date} ${customer.time}` },
-        });
-      } catch (e) {
-        await col('bookings').deleteOne({ bookingId, status: 'pending_payment' });
-        console.error('Cashfree order failed:', e.message);
-        return sendJSON(res, 502, { error: 'Online payment is not available right now.', code: 'payment_unavailable' });
-      }
-      await logEvent('payment_started', `${customer.name} opened payment for ₹${q.payNow} (${q.therapist.name})`, { bookingId });
-      return sendJSON(res, 200, {
-        provider: 'cashfree', bookingId, orderId: bookingId, amount: q.payNow,
-        paymentSessionId: order.payment_session_id, mode: CF_LIVE ? 'production' : 'sandbox',
-      });
-    }
+    // UPI: the customer pays the business UPI ID (Admin → Contact) by QR, then uploads a screenshot + UTR.
+    // The booking waits as "Awaiting payment" until then, and is marked Paid only after the admin checks the bank.
+    const contact = contactOf(await readCatalog());
+    if (!contact.upiId) return sendJSON(res, 503, { error: 'Online payment is not set up yet. Please contact us on WhatsApp to book.', code: 'payment_unavailable' });
+    await col('bookings').insertOne(newBooking(bookingId, 'upi'));
+    await logEvent('payment_started', `${customer.name} opened UPI payment for ₹${q.payNow} (${q.therapist.name})`, { bookingId });
+    return sendJSON(res, 200, { provider: 'upi', bookingId, amount: q.payNow, ...upiPayee(contact) });
+  }
 
-    let order;
-    try {
-      order = await razorpay('POST', '/orders', {
-        amount: q.payNow * 100, // paise
-        currency: 'INR',
-        receipt: bookingId,
-        notes: {
-          therapist: q.therapist.name, payment: body.pay, customer: customer.name,
-          mobile: customer.mobile, slot: `${customer.date} ${customer.time}`,
-        },
-      });
-    } catch (e) {
-      // Razorpay unreachable or keys wrong: tell the page so it can offer WhatsApp instead
-      console.error('Razorpay order failed:', e.message);
-      return sendJSON(res, 502, { error: 'Online payment is not available right now.', code: 'payment_unavailable' });
+  // UPI payment proof: screenshot (request body = the image) + UTR (12-digit bank reference).
+  // Only the device or account that made the booking can submit it.
+  if (pathname === '/api/payment-proof' && req.method === 'POST') {
+    const bookingId = clip(url.searchParams.get('bookingId'), 40);
+    const utr = String(url.searchParams.get('utr') || '').replace(/\s/g, '');
+    if (!/^\d{12}$/.test(utr)) return sendJSON(res, 400, { error: 'Enter the 12-digit UTR / UPI reference number from your payment app.', field: 'utr' });
+    const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    if (!PHOTO_TYPES[type]) return sendJSON(res, 400, { error: 'Please attach the payment screenshot (JPG, PNG or WebP).', field: 'screenshot' });
+    if (Number(req.headers['content-length']) > PHOTO_MAX) return sendJSON(res, 413, { error: 'Screenshot is too big (max 3 MB).', field: 'screenshot' }, { Connection: 'close' });
+    let buf;
+    try { buf = await readRawBody(req, PHOTO_MAX); } catch (e) { return sendJSON(res, 413, { error: 'Screenshot is too big (max 3 MB).', field: 'screenshot' }); }
+    if (!buf || !buf.length || !PHOTO_TYPES[type](buf)) return sendJSON(res, 400, { error: "That file isn't a valid image.", field: 'screenshot' });
+
+    const user = await currentUser(req);
+    const owner = [{ deviceHash: deviceHashOf(url.searchParams.get('deviceId')) || '-' }];
+    if (user) owner.push({ userId: String(user._id) });
+    const b = await col('bookings').findOne({ bookingId, $or: owner });
+    if (!b) return sendJSON(res, 404, { error: 'Booking not found.' });
+    if (b.payment?.gateway !== 'upi') return sendJSON(res, 400, { error: 'This booking is not a UPI payment.' });
+    if (b.status === 'payment_submitted') return sendJSON(res, 409, { error: 'Payment proof was already submitted – we are verifying it.' });
+    if (b.status !== 'pending_payment') return sendJSON(res, 409, { error: 'This booking is already paid.' });
+    if (await col('bookings').findOne({ 'payment.utr': utr, bookingId: { $ne: bookingId } })) {
+      return sendJSON(res, 409, { error: 'This UTR number was already used for another booking.', field: 'utr' });
     }
-    await col('bookings').insertOne(newBooking(order.id, 'razorpay'));
-    await logEvent('payment_started', `${customer.name} opened payment for ₹${q.payNow} (${q.therapist.name})`, { bookingId });
-    return sendJSON(res, 200, { provider: 'razorpay', orderId: order.id, amount: order.amount, currency: order.currency, keyId: KEY_ID, bookingId });
+    const proof = await col('proofs').insertOne({ bookingId, type, data: buf, size: buf.length, createdAt: new Date() });
+    let updated;
+    try {
+      updated = await col('bookings').findOneAndUpdate(
+        { _id: b._id, status: 'pending_payment' },
+        { $set: { status: 'payment_submitted', 'payment.utr': utr, 'payment.proofId': String(proof.insertedId), 'payment.submittedAt': new Date(), updatedAt: new Date() },
+          $unset: { 'payment.rejected': '' } },
+        { returnDocument: 'after' });
+    } catch (e) {
+      await col('proofs').deleteOne({ _id: proof.insertedId });
+      if (e.code === 11000) return sendJSON(res, 409, { error: 'This UTR number was already used for another booking.', field: 'utr' });
+      throw e;
+    }
+    if (!updated) { await col('proofs').deleteOne({ _id: proof.insertedId }); return sendJSON(res, 409, { error: 'This booking was updated meanwhile. Please refresh.' }); }
+    if (b.payment?.proofId) await col('proofs').deleteOne({ _id: toId(b.payment.proofId) }).catch(() => {}); // earlier rejected proof
+    await logEvent('payment_submitted', `${b.customer?.name || 'A customer'} submitted UPI payment ₹${b.payment.paidOnline} (UTR ${utr}) for ${b.bookingId} – please verify`, { bookingId });
+    return sendJSON(res, 200, { ok: true, status: 'payment_submitted', bookingId });
   }
 
   // Cashfree: the checkout page (or the return page after a redirect) asks whether the order is paid.
@@ -1059,8 +1068,8 @@ async function handle(req, res) {
       const [total, today, upcoming, requests, revenue, customers, subscribers, byStatus] = await Promise.all([
         col('bookings').countDocuments(real),
         col('bookings').countDocuments({ ...real, createdAt: { $gte: start } }),
-        col('bookings').countDocuments({ 'customer.date': { $gte: ymd }, status: { $in: ['requested', 'paid', 'confirmed'] } }),
-        col('bookings').countDocuments({ status: 'requested' }),
+        col('bookings').countDocuments({ 'customer.date': { $gte: ymd }, status: { $in: ['requested', 'payment_submitted', 'paid', 'confirmed'] } }),
+        col('bookings').countDocuments({ status: { $in: ['requested', 'payment_submitted'] } }),
         col('bookings').aggregate([
           { $match: { 'payment.paymentId': { $exists: true }, status: { $in: ['paid', 'confirmed', 'completed'] } } },
           { $group: { _id: null, sum: { $sum: '$payment.paidOnline' } } },
@@ -1079,7 +1088,7 @@ async function handle(req, res) {
       const status = url.searchParams.get('status') || '';
       const q = clip(url.searchParams.get('q'), 60).trim();
       const filter = {};
-      if (status === 'active') filter.status = { $in: ['requested', 'paid', 'confirmed'] };
+      if (status === 'active') filter.status = { $in: ['requested', 'payment_submitted', 'paid', 'confirmed'] };
       else if (status) filter.status = status;
       else filter.status = { $ne: 'pending_payment' };
       if (q) {
@@ -1088,6 +1097,46 @@ async function handle(req, res) {
       }
       const list = await col('bookings').find(filter).sort({ createdAt: -1 }).limit(300).toArray();
       return sendJSON(res, 200, { bookings: list.map(bookingForAdmin) });
+    }
+
+    // UPI payment screenshot for a booking (admin only)
+    const proofMatch = pathname.match(/^\/api\/admin\/proofs\/([a-f0-9]{24})$/);
+    if (proofMatch && req.method === 'GET') {
+      const p = await col('proofs').findOne({ _id: toId(proofMatch[1]) });
+      if (!p) return sendJSON(res, 404, { error: 'Screenshot not found.' });
+      const buf = Buffer.from(p.data.buffer || p.data);
+      res.writeHead(200, { 'Content-Type': p.type, 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+      return res.end(buf);
+    }
+
+    // Verify a UPI payment after checking the bank app: approve → Paid, reject → customer pays / submits again
+    const verifyMatch = pathname.match(/^\/api\/admin\/bookings\/([A-Za-z0-9]{6,40})\/verify$/);
+    if (verifyMatch && req.method === 'POST') {
+      const body = await readBody(req);
+      const b = await col('bookings').findOne({ bookingId: verifyMatch[1] });
+      if (!b) return sendJSON(res, 404, { error: 'Booking not found.' });
+      if (b.status !== 'payment_submitted') return sendJSON(res, 409, { error: 'This booking has no payment waiting for verification.' });
+      if (body.action === 'approve') {
+        const done = await col('bookings').findOneAndUpdate(
+          { _id: b._id, status: 'payment_submitted' },
+          { $set: { status: 'paid', paidAt: new Date(), updatedAt: new Date(), 'payment.paymentId': `UTR ${b.payment.utr}`, 'payment.confirmedVia': 'upi-verified' } },
+          { returnDocument: 'after' });
+        if (!done) return sendJSON(res, 409, { error: 'Already handled.' });
+        await logEvent('payment_success', `Payment verified: ₹${b.payment.paidOnline} from ${b.customer?.name || 'customer'} (${b.bookingId}, UTR ${b.payment.utr})`, { bookingId: b.bookingId });
+        return sendJSON(res, 200, { ok: true, booking: bookingForAdmin(done) });
+      }
+      if (body.action === 'reject') {
+        const reason = clip(body.reason || 'Payment not received', 200).trim() || 'Payment not received';
+        const done = await col('bookings').findOneAndUpdate(
+          { _id: b._id, status: 'payment_submitted' },
+          { $set: { status: 'pending_payment', updatedAt: new Date(), 'payment.rejected': reason },
+            $unset: { 'payment.utr': '' }, $push: { 'payment.rejectedUtrs': b.payment.utr } },
+          { returnDocument: 'after' });
+        if (!done) return sendJSON(res, 409, { error: 'Already handled.' });
+        await logEvent('payment_failed', `UPI payment rejected for ${b.customer?.name || 'a customer'} (${b.bookingId}, UTR ${b.payment.utr}): ${reason}`, { bookingId: b.bookingId });
+        return sendJSON(res, 200, { ok: true, booking: bookingForAdmin(done) });
+      }
+      return sendJSON(res, 400, { error: 'Unknown action.' });
     }
 
     const statusMatch = pathname.match(/^\/api\/admin\/bookings\/([A-Za-z0-9]{6,40})$/);
@@ -1271,7 +1320,7 @@ async function requestHandler(req, res) {
       settings: {
         MONGODB_URI: seen('MONGODB_URI'), SESSION_SECRET: seen('SESSION_SECRET'),
         ADMIN_USERNAME: seen('ADMIN_USERNAME'), ADMIN_PASSWORD: seen('ADMIN_PASSWORD'),
-        ADMIN_PASSWORD_long_enough: ADMIN_ENABLED, RAZORPAY: RAZORPAY_ENABLED, CASHFREE: CASHFREE_ENABLED, paymentGateway: PROVIDER || 'none (WhatsApp only)',
+        ADMIN_PASSWORD_long_enough: ADMIN_ENABLED, paymentGateway: 'UPI QR (business UPI ID in Admin → Contact)',
       },
       liveUpdates: database === 'connected' ? (store.supportsChangeStreams() ? 'change streams' : 'this server') : 'unknown',
     });
@@ -1284,7 +1333,12 @@ async function requestHandler(req, res) {
   }
   return handle(req, res).catch((err) => {
     console.error(err.message);
-    if (!res.headersSent) sendJSON(res, 400, { error: err.message || 'Something went wrong.' });
+    // Database / network hiccups: don't show customers the technical message
+    const infra = /^Mongo/.test(String(err.name)) || /ECONN|ETIMEDOUT|EPIPE|socket|connection .* closed|timed out/i.test(String(err.message));
+    if (!res.headersSent) {
+      if (infra) sendJSON(res, 503, { error: 'Our system is busy for a moment. Please try again in a few seconds.' });
+      else sendJSON(res, 400, { error: err.message || 'Something went wrong.' });
+    }
     else res.end();
   });
 }
@@ -1305,10 +1359,6 @@ if (require.main === module) (async () => {
     console.log(ADMIN_ENABLED
       ? `Admin dashboard: http://localhost:${PORT}/admin  (username "${ADMIN_USERNAME}")`
       : 'Admin dashboard: OFF – set ADMIN_PASSWORD (10+ characters) in .env to turn it on');
-    console.log(PROVIDER === 'cashfree'
-      ? `Payments: Cashfree (${CF_LIVE ? 'LIVE' : 'SANDBOX test'} mode)`
-      : PROVIDER === 'razorpay'
-        ? `Payments: Razorpay (${KEY_ID.startsWith('rzp_test_') ? 'TEST mode' : 'LIVE mode'})`
-        : 'Payments: OFF – add CASHFREE_APP_ID/CASHFREE_SECRET_KEY (or Razorpay keys) to .env (bookings fall back to WhatsApp)');
+    console.log('Payments: UPI QR + screenshot/UTR (set the business UPI ID in Admin → Contact)');
   });
 })();

@@ -34,7 +34,7 @@ async function request<T>(path: string, body?: unknown, init: RequestInit = {}):
 }
 
 export const api = {
-  config: () => request<{ provider: 'cashfree' | 'razorpay' | null; razorpay: boolean; keyId: string | null; cashfreeMode: CashfreeMode | null }>('/api/config'),
+  config: () => request<{ provider: 'upi' | null }>('/api/config'),
   me: () => request<{ user: User | null }>('/api/me'),
   login: (email: string, password: string, city = '') => request<{ user: User }>('/api/login', { email, password, city }),
   signup: (b: { name: string; email: string; mobile: string; password: string; city?: string }) => request<{ user: User }>('/api/signup', b),
@@ -44,23 +44,21 @@ export const api = {
   subscribe: (email: string) => request<{ ok: true; already: boolean }>('/api/subscribe', { email }),
   myBookings: (deviceId: string) => request<{ bookings: CustomerBooking[] }>('/api/my-bookings', { deviceId }),
   bookingRequest: (d: BookingDetails) => request<{ bookingId: string }>('/api/booking-request', d, { keepalive: true }),
-  createOrder: (d: BookingDetails) => request<RazorpayOrder | CashfreeOrder>('/api/create-order', d),
+  createOrder: (d: BookingDetails) => request<UpiOrder>('/api/create-order', d),
+  /** UPI: payment screenshot (resized JPEG) + 12-digit UTR for a booking made on this device / account */
+  submitPaymentProof: (bookingId: string, utr: string, screenshot: Blob, deviceId: string) =>
+    request<{ ok: true; status: 'payment_submitted' }>(`/api/payment-proof?${new URLSearchParams({ bookingId, utr, deviceId })}`, undefined,
+      { method: 'POST', body: screenshot, headers: { 'Content-Type': screenshot.type || 'image/jpeg' } }),
   cashfreeVerify: (orderId: string) => request<CashfreeStatus>('/api/cashfree-verify', { orderId }),
   notifications: () => request<{ notifications: AppNotification[] }>('/api/notifications'),
   resumePayment: (bookingId: string) =>
-    request<{ status: 'paid' | 'pending'; bookingId: string; orderId?: string; paymentSessionId?: string; mode?: CashfreeMode }>('/api/resume-payment', { bookingId }),
-  verifyPayment: (r: RazorpayResponse) => request<{ bookingId: string }>('/api/verify-payment', r),
+    request<{ status: 'paid' | 'pending' | 'payment_submitted'; bookingId: string; provider?: 'upi'; amount?: number; upiId?: string; payeeName?: string }>('/api/resume-payment', { bookingId }),
 };
 
-export interface RazorpayResponse {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-}
 
 export type CashfreeMode = 'sandbox' | 'production';
-export interface RazorpayOrder { provider: 'razorpay'; orderId: string; amount: number; currency: string; keyId: string; bookingId: string }
-export interface CashfreeOrder { provider: 'cashfree'; orderId: string; amount: number; bookingId: string; paymentSessionId: string; mode: CashfreeMode }
+/** What the customer pays by UPI QR */
+export interface UpiOrder { provider: 'upi'; bookingId: string; amount: number; upiId: string; payeeName: string }
 export interface CashfreeStatus {
   status: 'paid' | 'pending' | 'failed';
   message: string;
@@ -75,6 +73,8 @@ export interface CashfreeStatus {
 export interface AppNotification {
   id: string;
   type: 'payment_pending';
+  /** Set when the admin rejected an earlier payment proof */
+  rejected?: string;
   bookingId: string;
   therapist?: string;
   speciality?: string;

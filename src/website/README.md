@@ -13,8 +13,8 @@ It runs in the browser and talks to the backend (`backend/server.js`) through `/
 |---|---|---|
 | `/` | `Home.tsx` | Hero video, services, why us, contact |
 | `/book-now` | `BookNow.tsx` | Choose Basic / Therapist / Premium and a therapist (list comes live from the admin) |
-| `/therapist/:type/:id` | `Checkout.tsx` | Therapist details, date & time, address + map pin, offer code, **Pay Online** (treatment + ₹149 visiting charge) / **Pay Visiting Charge** → Cashfree |
-| `/payment-return` | `PaymentReturn.tsx` | Where Cashfree sends the customer after paying – shows confirmed / failed |
+| `/therapist/:type/:id` | `Checkout.tsx` | Therapist details, date & time, address + map pin, offer code, **Pay Online** (treatment + ₹149 visiting charge) / **Pay Visiting Charge** → UPI QR + screenshot/UTR |
+| `/payment-return` | `PaymentReturn.tsx` | Old Cashfree return page (bookings started before the switch to UPI) |
 | `/offers` | `Offers.tsx` | Offer codes (managed in the admin) |
 | `/bookings` | `Bookings.tsx` | My bookings – upcoming and past, with status |
 | `/login`, `/signup` | `Auth.tsx` | Customer accounts – asks for location and shows the detected city |
@@ -32,6 +32,7 @@ Routes are listed in `App.tsx`. Old `.html` addresses redirect to these automati
 | `Photo.tsx` | An image with a green placeholder until the photo exists |
 | `Icon.tsx` | All the line icons |
 | `Toast.tsx` | Small pop-up messages |
+| `UpiPay.tsx` | UPI checkout: animated QR → upload screenshot + UTR → submitted (used by the checkout and the bell's *Pay now*) |
 
 ## Helpers (`lib/`)
 
@@ -41,7 +42,7 @@ Routes are listed in `App.tsx`. Old `.html` addresses redirect to these automati
 | `catalog.tsx` | Live therapists, prices, offers and **contact details** (WhatsApp, phone, Instagram, email…) from `/api/catalog` (falls back to `shared/catalog.json`) |
 | `location.ts` | Asks the browser for the location and gets the city name from the backend |
 | `auth.tsx` | Knows whether a customer is logged in |
-| `cashfree.ts` / `razorpay.ts` | Load the payment gateway's script only when needed |
+| `image.ts` | Shrinks photos/screenshots in the browser before uploading |
 | `storage.ts` | Things kept in this browser: device id, saved offer, city, favourites |
 | `format.ts`, `hooks.ts`, `types.ts` | Money/date formatting, small React helpers, shared types |
 
