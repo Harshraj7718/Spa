@@ -163,8 +163,10 @@ function CheckoutPage({ t }: { t: Therapist }) {
     if (upi && upiFor.current === key) { setUpiOpen(true); return; }
     setPaying(true);
     try {
-      const order = await api.createOrder(d);
+      var order = await api.createOrder(d);
+      const getupi=await api.getupi();
       upiFor.current = key;
+      console.log(order,getupi);
       setUpi(order);
       setUpiOpen(true);
     } catch (err) {
