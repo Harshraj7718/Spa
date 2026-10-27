@@ -170,3 +170,7 @@
 .city-current { cursor: default; }
 .city-current span { display: grid; gap: 1px; }
 .city-current small { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+
+/* Notification kinds: submitted (waiting) / verified (done) */
+.notif-ic.payment_submitted { background: #fdf0d2; color: #8a5a00; }
+.notif-ic.payment_verified { background: #e2edd0; color: #3f5a1c; }

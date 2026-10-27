@@ -51,8 +51,8 @@ export const api = {
       { method: 'POST', body: screenshot, headers: { 'Content-Type': screenshot.type || 'image/jpeg' } }),
   cashfreeVerify: (orderId: string) => request<CashfreeStatus>('/api/cashfree-verify', { orderId }),
   notifications: () => request<{ notifications: AppNotification[] }>('/api/notifications'),
-  resumePayment: (bookingId: string) =>
-    request<{ status: 'paid' | 'pending' | 'payment_submitted'; bookingId: string; provider?: 'upi'; amount?: number; upiId?: string; payeeName?: string }>('/api/resume-payment', { bookingId }),
+  resumePayment: (bookingId: string, deviceId = '') =>
+    request<{ status: 'paid' | 'pending' | 'payment_submitted'; bookingId: string; provider?: 'upi'; amount?: number; upiId?: string; payeeName?: string }>('/api/resume-payment', { bookingId, deviceId }),
 };
 
 
@@ -72,7 +72,8 @@ export interface CashfreeStatus {
 
 export interface AppNotification {
   id: string;
-  type: 'payment_pending';
+  type: 'payment_pending' | 'payment_submitted' | 'payment_verified';
+  utr?: string;
   /** Set when the admin rejected an earlier payment proof */
   rejected?: string;
   bookingId: string;

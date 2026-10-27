@@ -23,6 +23,9 @@ export interface CustomerBooking {
     referral?: string;
     paymentId?: string;
     utr?: string;
+    gateway?: string;
+    /** Admin's reason when a UPI payment proof was rejected */
+    rejected?: string;
   };
   customer: { stay?: string; date?: string; time?: string; address?: string };
 }

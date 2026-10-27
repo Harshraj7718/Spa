@@ -5,5 +5,4 @@
 .env.*
 !.env.example
 data/
-_old_static/
 .claude/

@@ -42,7 +42,8 @@ export interface AdminTherapist {
   experience?: string; specializes?: string; languages?: string; about?: string; hidden?: boolean;
 }
 export interface AdminOffer { code: string; title: string; desc: string; kind: 'percent' | 'flat'; value: number; max?: number; hidden?: boolean; disabled?: boolean }
-export interface AdminContact { whatsapp: string; phone: string; instagram: string; email: string; address: string; hours: string; upiId: string; upiName: string }
+export interface AdminUpi { upiId: string; upiName: string }
+export interface AdminContact { whatsapp: string; phone: string; instagram: string; email: string; address: string; hours: string; upiId?: string; upiName?: string; upiAccounts: AdminUpi[]; upiActive: number }
 export interface AdminCatalog { therapists: Record<TherapistType, AdminTherapist[]>; offers: AdminOffer[]; contact: AdminContact; version: string }
 
 export class SessionEnded extends Error {}

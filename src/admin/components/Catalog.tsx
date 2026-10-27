@@ -356,6 +356,9 @@ export function ContactPanel(props: Props) {
   if (!data) return <section className="panel"><p className="empty">Loading…</p></section>;
   const form = draft || data.contact;
   const set = (k: keyof AdminContact, v: string) => setDraft({ ...form, [k]: v });
+  const upis = form.upiAccounts || [];
+  const setUpis = (next: typeof upis, active = form.upiActive) => setDraft({ ...form, upiAccounts: next, upiActive: Math.min(active, Math.max(0, next.length - 1)) });
+  const setUpi = (i: number, patch: Partial<{ upiId: string; upiName: string }>) => setUpis(upis.map((a, k) => (k === i ? { ...a, ...patch } : a)));
   const changed = draft !== null && JSON.stringify(draft) !== JSON.stringify(data.contact);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -381,12 +384,29 @@ export function ContactPanel(props: Props) {
           </Field>
           <Field label="Address (footer)"><input maxLength={120} value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Vijay Nagar, Indore" /></Field>
           <Field label="Opening hours (footer)"><input maxLength={60} value={form.hours} onChange={(e) => set('hours', e.target.value)} placeholder="Daily, 10 AM - 10 PM" /></Field>
-          <Field label="Business UPI ID (payments)" hint={form.upiId ? 'Customers pay this UPI ID by QR, then upload a screenshot + UTR for you to verify.' : 'Online payment is OFF until this is set. Example: yourname@okhdfcbank'}>
-            <input value={form.upiId || ''} onChange={(e) => set('upiId', e.target.value.trim())} placeholder="yourname@okhdfcbank" autoCapitalize="off" spellCheck={false} />
-          </Field>
-          <Field label="UPI payee name" hint="Shown on the QR and in the customer's UPI app">
-            <input maxLength={60} value={form.upiName || ''} onChange={(e) => set('upiName', e.target.value)} placeholder="AAPNA SPA" />
-          </Field>
+        </div>
+
+        <div className="upi-box">
+          <div className="upi-box-head">
+            <h3>Payments – your UPI IDs</h3>
+            <span className="muted">{upis.length ? 'Customers pay the selected UPI ID by QR, then upload a screenshot + UTR for you to verify.' : 'Online payment is OFF until you add a UPI ID. Example: yourname@okhdfcbank'}</span>
+          </div>
+          {upis.map((a, i) => (
+            <div key={i} className={`upi-acct ${i === form.upiActive ? 'active' : ''}`}>
+              <label className="upi-radio" title="Use this one for payments">
+                <input type="radio" name="upiActive" checked={i === form.upiActive} onChange={() => setDraft({ ...form, upiActive: i })} />
+                <span>{i === form.upiActive ? 'In use' : 'Use'}</span>
+              </label>
+              <div className="upi-fields">
+                <input className="upi-id-in" value={a.upiId} onChange={(e) => setUpi(i, { upiId: e.target.value.trim().toLowerCase() })} placeholder="yourname@okhdfcbank" autoCapitalize="off" spellCheck={false} aria-label={`UPI ID ${i + 1}`} />
+                <input className="upi-name-in" maxLength={60} value={a.upiName} onChange={(e) => setUpi(i, { upiName: e.target.value })} placeholder="Payee name (e.g. AAPNA SPA)" aria-label={`Payee name ${i + 1}`} />
+              </div>
+              <button type="button" className="upi-del" aria-label="Remove this UPI ID" onClick={() => setUpis(upis.filter((_, k) => k !== i), i <= form.upiActive ? Math.max(0, form.upiActive - 1) : form.upiActive)}>✕</button>
+            </div>
+          ))}
+          {upis.length < 5 && (
+            <button type="button" className="btn upi-add" onClick={() => setUpis([...upis, { upiId: '', upiName: '' }], upis.length ? form.upiActive : 0)}>+ Add UPI ID</button>
+          )}
         </div>
         <footer>
           <button type="button" className="btn" disabled={!changed || saving} onClick={() => setDraft(null)}>Undo changes</button>

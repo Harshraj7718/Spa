@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { Footer } from './components/Footer';
@@ -17,6 +17,7 @@ import Privacy from './pages/Privacy';
 import Refund from './pages/Refund';
 import InappropriatePolicy from './pages/InappropriatePolicy';
 import Terms from './pages/Terms';
+import UPITester from './pages/UPITester';
 
 /** Which shared parts a page shows (same as the original site). */
 function Page({ header = true, footer = false, nav = true, children }: { header?: boolean; footer?: boolean; nav?: boolean; children: ReactNode }) {
@@ -44,19 +45,6 @@ function ScrollManager() {
     lastPath.current = pathname;
   }, [pathname, hash]);
   return null;
-}
-
-// ---- Old .html addresses keep working ----
-function LegacyRedirect({ to }: { to: string }) {
-  const { hash } = useLocation();
-  const [params] = useSearchParams();
-  const next = params.get('next');
-  const query = next ? `?next=${encodeURIComponent('/' + next.replace(/\.html.*$/, '').replace(/^\/?(index)?$/, ''))}` : '';
-  return <Navigate to={to + query + hash} replace />;
-}
-function LegacyTherapist() {
-  const [params] = useSearchParams();
-  return <Navigate to={`/therapist/${params.get('type') || 'basic'}/${Number(params.get('id') || 0)}`} replace />;
 }
 
 function NotFound() {
@@ -89,14 +77,8 @@ export default function App() {
             <Route path="/refund-policy" element={<Page footer><Refund /></Page>} />
             <Route path="/policy-against-inappropriate-requests" element={<Page footer><InappropriatePolicy /></Page>} />
             <Route path="/terms-and-conditions" element={<Page footer><Terms /></Page>} />
+            <Route path="/upi-tester" element={<Page><UPITester /></Page>} />
 
-            <Route path="/index.html" element={<LegacyRedirect to="/" />} />
-            <Route path="/book-now.html" element={<LegacyRedirect to="/book-now" />} />
-            <Route path="/therapist.html" element={<LegacyTherapist />} />
-            <Route path="/offers.html" element={<LegacyRedirect to="/offers" />} />
-            <Route path="/bookings.html" element={<LegacyRedirect to="/bookings" />} />
-            <Route path="/login.html" element={<LegacyRedirect to="/login" />} />
-            <Route path="/signup.html" element={<LegacyRedirect to="/signup" />} />
 
             <Route path="*" element={<Page><NotFound /></Page>} />
           </Routes>

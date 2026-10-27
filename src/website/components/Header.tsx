@@ -5,7 +5,7 @@ import { BRAND, LotusMark } from './Logo';
 import { useToast } from './Toast';
 import { useAuth } from '../lib/auth';
 import { useEscape } from '../lib/hooks';
-import { savedCity } from '../lib/storage';
+import { getDeviceId, savedCity } from '../lib/storage';
 import { api, type AppNotification } from '../lib/api';
 import { UpiPay, type UpiPayment } from './UpiPay';
 import { rupee } from '../lib/format';
@@ -86,7 +86,7 @@ export function Header() {
   const payNow = async (n: AppNotification) => {
     setPayingId(n.bookingId);
     try {
-      const r = await api.resumePayment(n.bookingId);
+      const r = await api.resumePayment(n.bookingId, getDeviceId());
       if (r.status === 'payment_submitted') toast('Your payment proof is being verified ✓');
       else if (r.status === 'paid') toast('This booking is already paid 🎉');
       else if (r.upiId && r.amount !== undefined) { setPop(null); setUpi({ bookingId: r.bookingId, amount: r.amount, upiId: r.upiId, payeeName: r.payeeName || 'AAPNA SPA' }); }
@@ -212,17 +212,26 @@ export function Header() {
               <div className="notif-body">
                 {notes.map((n) => (
                   <article key={n.id} className={`notif-item ${seen.includes(n.id) ? '' : 'unread'}`}>
-                    <span className="notif-ic"><Icon name="check" /></span>
+                    <span className={`notif-ic ${n.type}`}><Icon name={n.type === 'payment_submitted' ? 'clock' : 'check'} /></span>
                     <div className="notif-text">
-                      <div className="notif-top"><b>Payment pending</b><span className="notif-id">#{n.bookingId.slice(-6)}</span></div>
-                      <p>{n.rejected
-                        ? <>We couldn't verify your last payment ({n.rejected}). Please pay again and upload the proof.</>
-                        : <>Complete the payment for {n.speciality || n.therapist || 'your session'} to secure your slot.</>}</p>
+                      <div className="notif-top">
+                        <b>{n.type === 'payment_verified' ? 'Payment verified 🎉' : n.type === 'payment_submitted' ? 'Payment submitted' : n.rejected ? 'Payment rejected' : 'Payment pending'}</b>
+                        <span className="notif-id">#{n.bookingId.slice(-6)}</span>
+                      </div>
+                      <p>{n.type === 'payment_verified'
+                        ? <>We received {rupee(n.amount || 0)} – your {n.speciality || n.therapist || 'session'} booking is confirmed.</>
+                        : n.type === 'payment_submitted'
+                          ? <>We're verifying your payment of {rupee(n.amount || 0)}{n.utr ? ` (UTR ${n.utr})` : ''}. You'll be notified here.</>
+                          : n.rejected
+                            ? <>We couldn't verify your last payment ({n.rejected}). Please pay again and upload the proof.</>
+                            : <>Complete the payment for {n.speciality || n.therapist || 'your session'} to secure your slot.</>}</p>
                       <div className="notif-meta">
                         {slotLabel(n) && <span className="notif-when">{slotLabel(n)}</span>}
-                        <button type="button" className="notif-pay" disabled={payingId === n.bookingId} onClick={() => payNow(n)}>
-                          {payingId === n.bookingId ? 'Opening…' : <>Pay {rupee(n.amount || 0)} now →</>}
-                        </button>
+                        {n.type === 'payment_pending' && (
+                          <button type="button" className="notif-pay" disabled={payingId === n.bookingId} onClick={() => payNow(n)}>
+                            {payingId === n.bookingId ? 'Opening…' : <>Pay {rupee(n.amount || 0)} now →</>}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </article>

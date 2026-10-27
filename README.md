@@ -48,8 +48,7 @@ spa/
 ├── public/assets/          ← your photos & video (copied into the build as /assets/…)
 ├── backend/                ← BACKEND: server.js (all /api routes, payments, admin API) + db.js (MongoDB)
 ├── api/index.js            ← tiny Vercel entry that loads backend/server.js (Vercel needs it here)
-├── dist/                   ← the built site (created by npm run build – don't edit)
-└── _old_static/            ← the previous plain-HTML version, kept for reference (safe to delete)
+└── dist/                   ← the built site (created by npm run build – don't edit)
 ```
 
 ## Pages
@@ -65,7 +64,6 @@ spa/
 | `/payment-return` | Old Cashfree return page (only for bookings started before the switch to UPI) |
 | `/admin` | Admin dashboard |
 
-Old addresses (`index.html`, `book-now.html`, `therapist.html?type=…&id=…`, `offers.html`, `login.html`…) redirect to the new ones automatically.
 
 ## Where to put your photos and video
 
@@ -193,7 +191,7 @@ If your network's DNS can't look up `mongodb+srv://` addresses (`querySrv ECONNR
 
 The project is ready for Vercel: the website and admin are served as static files from `dist/`, and every `/api/…`
 request runs `api/index.js` (which loads `backend/server.js`) as a serverless function. Settings are in `vercel.json`;
-`.vercelignore` keeps `.env`, `data/` and `_old_static/` from ever being uploaded.
+`.vercelignore` keeps `.env` and `data/` from ever being uploaded.
 
 1. **Atlas → Security → Network Access → Add IP Address → Allow access from anywhere (`0.0.0.0/0`).**
    Vercel has no fixed IP addresses. Your database is then protected only by its password, so use a long, unique one.

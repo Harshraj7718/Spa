@@ -96,7 +96,9 @@ async function loadCatalog() {
 async function publicCatalog() {
   const c = await readCatalog();
   return {
-    visitCharge: c.visitCharge, businessWhatsapp: contactOf(c).whatsapp || c.businessWhatsapp, contact: contactOf(c),
+    visitCharge: c.visitCharge, businessWhatsapp: contactOf(c).whatsapp || c.businessWhatsapp,
+    // Only the display fields go to the public website – never the UPI IDs (they're used server-side)
+    contact: (({ whatsapp, phone, instagram, email, address, hours }) => ({ whatsapp, phone, instagram, email, address, hours }))(contactOf(c)),
     therapistDefaults: c.therapistDefaults,
     therapists: Object.fromEntries(TYPES.map((ty) => [ty, (c.therapists?.[ty] || [])
       .map((t, i) => ({ ...t, key: keyOf(t, i) })).filter((t) => !t.hidden)])),
@@ -149,14 +151,23 @@ const text = (v, max, label, required = false) => {
  * Contact details shown on the website (WhatsApp, phone, Instagram, email, address, hours).
  * Edited in Admin → Contact. Anything left empty is hidden on the website.
  */
-const DEFAULT_CONTACT = { whatsapp: '', phone: '', instagram: '', email: '', address: '', hours: '', upiId: '', upiName: '' };
-// Who the customer pays by UPI (shown on the QR)
-const upiPayee = (c) => ({ upiId: c.upiId, payeeName: c.upiName || 'AAPNA SPA' });
+const DEFAULT_CONTACT = { whatsapp: '', phone: '', instagram: '', email: '', address: '', hours: '', upiAccounts: [], upiActive: 0 };
+// Who the customer pays by UPI (shown on the QR) – the admin's chosen "active" UPI ID
+const upiPayee = (c) => { const a = (c.upiAccounts || [])[c.upiActive] || {}; return { upiId: a.upiId || '', payeeName: a.upiName || 'AAPNA SPA' }; };
 function contactOf(c) {
   // Not saved from the admin yet: use the starting values in shared/catalog.json
   let start = {};
   if (!c.contact) { try { start = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8')).contact || {}; } catch (e) { /* ignore */ } }
-  return { ...DEFAULT_CONTACT, whatsapp: c.businessWhatsapp || '', phone: c.businessWhatsapp || '', ...start, ...(c.contact || {}) };
+  const out = { ...DEFAULT_CONTACT, whatsapp: c.businessWhatsapp || '', phone: c.businessWhatsapp || '', ...start, ...(c.contact || {}) };
+  // Older data had a single upiId/upiName – turn it into the one-item list
+  if (!Array.isArray(out.upiAccounts) || !out.upiAccounts.length) {
+    out.upiAccounts = out.upiId ? [{ upiId: out.upiId, upiName: out.upiName || '' }] : [];
+  }
+  out.upiActive = Math.min(Math.max(0, out.upiActive | 0), Math.max(0, out.upiAccounts.length - 1));
+  const active = out.upiAccounts[out.upiActive] || {};
+  out.upiId = active.upiId || '';       // kept so the rest of the server reads one "current" UPI ID
+  out.upiName = active.upiName || '';
+  return out;
 }
 function cleanContact(input = {}) {
   // Indian numbers: 10 digits get the 91 country code; other numbers keep their own code
@@ -181,13 +192,24 @@ function cleanContact(input = {}) {
     email,
     address: text(input.address, 120, 'Address'),
     hours: text(input.hours, 60, 'Opening hours'),
-    upiId: (() => {
-      const u = String(input.upiId || '').trim().toLowerCase();
-      if (u && !/^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/.test(u)) throw new Error('UPI ID: enter it like yourname@okhdfcbank or 9876543210@ybl.');
-      return u;
-    })(),
-    upiName: text(input.upiName, 60, 'UPI payee name'),
+    ...cleanUpiAccounts(input),
   };
+}
+// Up to 5 business UPI IDs (all the admin's own); the "active" one is shown on the QR
+function cleanUpiAccounts(input) {
+  let list = Array.isArray(input.upiAccounts) ? input.upiAccounts
+    : input.upiId ? [{ upiId: input.upiId, upiName: input.upiName }] : []; // older single-field form
+  if (list.length > 5) throw new Error('At most 5 UPI IDs.');
+  const seen = new Set();
+  const upiAccounts = list.map((a) => {
+    const upiId = String(a.upiId || '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/.test(upiId)) throw new Error(`UPI ID "${a.upiId}": enter it like yourname@okhdfcbank or 9876543210@ybl.`);
+    if (seen.has(upiId)) throw new Error(`The UPI ID ${upiId} is listed twice.`);
+    seen.add(upiId);
+    return { upiId, upiName: text(a.upiName, 60, 'UPI payee name') };
+  });
+  const upiActive = Math.min(Math.max(0, Number(input.upiActive) | 0), Math.max(0, upiAccounts.length - 1));
+  return { upiAccounts, upiActive };
 }
 
 function cleanTherapists(input) {
@@ -555,11 +577,6 @@ const MIME = {
   '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.woff2': 'font/woff2', '.md': 'text/plain; charset=utf-8',
 };
-// Old .html addresses from the first version of the site → the React pages
-const LEGACY = {
-  '/index.html': '/', '/book-now.html': '/book-now', '/offers.html': '/offers',
-  '/bookings.html': '/bookings', '/login.html': '/login', '/signup.html': '/signup',
-};
 
 function serveFile(req, res, file, extraHeaders = {}) {
   fs.stat(file, (err, st) => {
@@ -584,15 +601,6 @@ function serveStatic(req, res) {
   let urlPath;
   try { urlPath = decodeURIComponent(url.pathname); } catch (e) { res.writeHead(400); return res.end('Bad request'); }
 
-  // Old addresses keep working (permanent redirect)
-  if (LEGACY[urlPath] || urlPath === '/therapist.html') {
-    let to = LEGACY[urlPath];
-    if (urlPath === '/therapist.html') to = `/therapist/${encodeURIComponent(url.searchParams.get('type') || 'basic')}/${Number(url.searchParams.get('id')) || 0}`;
-    const next = url.searchParams.get('next');
-    if (next && /^[a-z-]+\.html$/i.test(next)) to += '?next=' + encodeURIComponent(LEGACY['/' + next] || '/');
-    res.writeHead(301, { Location: to });
-    return res.end();
-  }
 
   if (!fs.existsSync(path.join(DIST, 'index.html'))) {
     res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -629,6 +637,7 @@ function bookingForCustomer(b) {
     payment: {
       method: b.payment?.method, paidOnline: b.payment?.paidOnline || 0, cashOnService: b.payment?.cashOnService || 0,
       total: b.payment?.total, referral: b.payment?.referral, paymentId: b.payment?.paymentId, utr: b.payment?.utr,
+      gateway: b.payment?.gateway, rejected: b.payment?.rejected,
     },
     customer: {
       stay: b.customer?.stay, date: b.customer?.date, time: b.customer?.time,
@@ -656,12 +665,33 @@ function istToday() {
 }
 
 const ADMIN_STATUSES = ['requested', 'paid', 'confirmed', 'completed', 'cancelled'];
-const STATUS_LABEL = { requested: 'Requested', pending_payment: 'Awaiting payment', payment_submitted: 'Payment to verify', paid: 'Paid', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' };
+const STATUS_LABEL = { requested: 'Requested', pending_payment: 'Awaiting payment', payment_submitted: 'Payment submitted – verify', paid: 'Paid', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled' };
 
 // ---------- Routes ----------
 async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const { pathname } = url;
+
+  // ---------- UPI API Tester ----------
+  if (pathname === '/api/upi/random' && req.method === 'GET') {
+    const catalog = await readCatalog();
+    const contact = contactOf(catalog);
+
+    if (!contact.upiId) {
+      return sendJSON(res, 404, {
+        success: false,
+        message: 'No business UPI ID configured. Set it in Admin → Contact.',
+      });
+    }
+
+    return sendJSON(res, 200, {
+      success: true,
+      data: {
+        upiId: contact.upiId,
+        payeeName: contact.upiName || 'AAPNA SPA',
+      },
+    });
+  }
 
   if (pathname === '/api/config' && req.method === 'GET') {
     const upi = Boolean(contactOf(await readCatalog()).upiId);
@@ -829,16 +859,33 @@ async function handle(req, res) {
         createdAt: iso(b.createdAt),
       });
     }
+    // UPI results the customer should hear about
+    const weekAgo = Date.now() - 7 * 864e5;
+    for (const b of mine) {
+      if (b.payment?.gateway !== 'upi') continue;
+      const base = {
+        bookingId: b.bookingId, therapist: b.therapist?.name, speciality: b.therapist?.speciality,
+        date: b.customer?.date, time: b.customer?.time, amount: b.payment?.paidOnline, method: b.payment?.method, utr: b.payment?.utr || '',
+      };
+      if (b.status === 'payment_submitted') {
+        notifications.push({ ...base, id: `sub:${b.bookingId}`, type: 'payment_submitted', createdAt: iso(b.payment?.submittedAt || b.createdAt) });
+      } else if (['paid', 'confirmed'].includes(b.status) && b.payment?.confirmedVia === 'upi-verified' && new Date(b.paidAt).getTime() > weekAgo) {
+        notifications.push({ ...base, id: `ok:${b.bookingId}`, type: 'payment_verified', createdAt: iso(b.paidAt) });
+      }
+    }
+    notifications.sort((a, c) => String(c.createdAt).localeCompare(String(a.createdAt)));
     return sendJSON(res, 200, { notifications });
   }
 
   // Pay for an unpaid booking again (from the notification). Only the customer who made it can do this.
   if (pathname === '/api/resume-payment' && req.method === 'POST') {
     const user = await currentUser(req);
-    if (!user) return sendJSON(res, 401, { error: 'Please log in to complete this payment.' });
-    const bookingId = clip((await readBody(req)).bookingId, 40);
-    const b = await col('bookings').findOne({ bookingId, userId: String(user._id) });
-    if (!b) return sendJSON(res, 404, { error: 'Booking not found.' });
+    const body = await readBody(req);
+    const bookingId = clip(body.bookingId, 40);
+    const owner = [{ deviceHash: deviceHashOf(body.deviceId) || '-' }];
+    if (user) owner.push({ userId: String(user._id) });
+    const b = await col('bookings').findOne({ bookingId, $or: owner });
+    if (!b) return sendJSON(res, user ? 404 : 401, { error: user ? 'Booking not found.' : 'Please log in to complete this payment.' });
     if (b.payment?.gateway === 'upi') {
       if (b.status !== 'pending_payment') return sendJSON(res, 200, { status: b.status === 'payment_submitted' ? 'payment_submitted' : 'paid', bookingId });
       if (slotStart(b) < Date.now()) return sendJSON(res, 400, { error: 'This time slot has passed. Please make a new booking.' });
@@ -887,7 +934,7 @@ async function handle(req, res) {
     if (user) or.push({ userId: String(user._id) });
     if (!or.length) return sendJSON(res, 200, { bookings: [] });
     const list = await col('bookings')
-      .find({ $or: or, status: { $ne: 'pending_payment' } })
+      .find({ $or: or, $nor: [{ status: 'pending_payment', 'payment.rejected': { $exists: false } }] })
       .sort({ createdAt: -1 }).limit(100).toArray();
     return sendJSON(res, 200, { bookings: list.map(bookingForCustomer) });
   }

@@ -19,7 +19,7 @@ It runs in the browser and talks to the backend (`backend/server.js`) through `/
 | `/bookings` | `Bookings.tsx` | My bookings – upcoming and past, with status |
 | `/login`, `/signup` | `Auth.tsx` | Customer accounts – asks for location and shows the detected city |
 
-Routes are listed in `App.tsx`. Old `.html` addresses redirect to these automatically.
+Routes are listed in `App.tsx`.
 
 ## Parts used on many pages (`components/`)
 

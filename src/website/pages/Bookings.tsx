@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { useToast } from '../components/Toast';
+import { UpiPay, type UpiPayment } from '../components/UpiPay';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useBodyClass, useTitle } from '../lib/hooks';
@@ -22,6 +24,7 @@ function slotDate(b: CustomerBooking): Date {
 const STATUS: Record<string, [string, string]> = {
   requested: ['requested', 'Requested'],
   payment_submitted: ['requested', 'Verifying payment'],
+  pending_payment: ['cancelled', 'Payment rejected'],
   paid: ['paid', 'Confirmed'],
   confirmed: ['paid', 'Confirmed'],
   completed: ['done', 'Completed'],
@@ -33,6 +36,7 @@ function PayLine({ b }: { b: CustomerBooking }) {
   const p = b.payment || {};
   const paidOnline = Boolean(p.paymentId) || b.status === 'paid';
   if (b.status === 'cancelled' && !paidOnline) return <>No payment due</>;
+  if (b.status === 'pending_payment' && p.rejected) return <>Payment of <b>{rupee(p.paidOnline || 0)}</b> not verified – {p.rejected}</>;
   if (b.status === 'payment_submitted') return <>Paid <b>{rupee(p.paidOnline || 0)}</b> by UPI · verifying{p.utr ? <> (UTR <span className="allow-copy">{p.utr}</span>)</> : ''}</>;
   if (!paidOnline && b.status !== 'requested') return <>Total <b>{rupee(p.total || 0)}</b> · pay as agreed on WhatsApp</>;
   if (!paidOnline) {
@@ -47,6 +51,22 @@ function PayLine({ b }: { b: CustomerBooking }) {
 
 function BookingCard({ b, past, index }: { b: CustomerBooking; past: boolean; index: number }) {
   const { BUSINESS_WHATSAPP } = useCatalog();
+  const toast = useToast();
+  const [upi, setUpi] = useState<UpiPayment | null>(null);
+  const [opening, setOpening] = useState(false);
+  // Rejected UPI payment: show the QR again for the same booking
+  const payAgain = async () => {
+    setOpening(true);
+    try {
+      const r = await api.resumePayment(b.bookingId, getDeviceId());
+      if (r.upiId && r.amount !== undefined) setUpi({ bookingId: r.bookingId, amount: r.amount, upiId: r.upiId, payeeName: r.payeeName || 'AAPNA SPA' });
+      else toast(r.status === 'payment_submitted' ? 'Your payment proof is being verified ✓' : 'This booking is already paid 🎉');
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setOpening(false);
+    }
+  };
   const when = slotDate(b);
   const status = past && ['paid', 'confirmed'].includes(b.status) ? STATUS.completed : STATUS[b.status] || STATUS.requested;
   const help = encodeURIComponent(`Hi, I need help with my booking ${b.bookingId}`);
@@ -67,8 +87,11 @@ function BookingCard({ b, past, index }: { b: CustomerBooking; past: boolean; in
       </div>
       <div className="bk-foot">
         <span>ID: <span className="allow-copy">{b.bookingId}</span></span>
-        <a href={`https://wa.me/${BUSINESS_WHATSAPP}?text=${help}`} target="_blank" rel="noopener">Need help?</a>
+        {b.status === 'pending_payment' && b.payment?.rejected && !past
+          ? <button type="button" className="bk-pay" disabled={opening} onClick={payAgain}>{opening ? 'Opening…' : 'Pay again →'}</button>
+          : <a href={`https://wa.me/${BUSINESS_WHATSAPP}?text=${help}`} target="_blank" rel="noopener">Need help?</a>}
       </div>
+      {upi && <UpiPay payment={upi} onClose={() => { setUpi(null); window.dispatchEvent(new Event('bookings:refresh')); }} />}
     </article>
   );
 }
@@ -78,6 +101,13 @@ export default function Bookings() {
   useBodyClass('bookings-page');
   const { user } = useAuth();
   const [list, setList] = useState<CustomerBooking[] | null>(null);
+  const [reload, setReload] = useState(0);
+  // Reload after "Pay again" (the booking moves to "Verifying payment")
+  useEffect(() => {
+    const again = () => setReload((n) => n + 1);
+    window.addEventListener('bookings:refresh', again);
+    return () => window.removeEventListener('bookings:refresh', again);
+  }, []);
 
   // Bookings from the server (this device or this account) + WhatsApp requests kept on this device
   useEffect(() => {
@@ -86,7 +116,7 @@ export default function Bookings() {
       .then((r) => r.bookings).catch(() => [] as CustomerBooking[])
       .then((server) => { if (alive) setList([...server, ...readLocalBookings()]); });
     return () => { alive = false; };
-  }, [user]);
+  }, [user, reload]);
 
   const now = Date.now();
   const upcoming = (list || []).filter((b) => slotDate(b).getTime() + 3600e3 >= now).sort((a, b) => +slotDate(a) - +slotDate(b));

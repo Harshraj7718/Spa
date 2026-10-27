@@ -22,7 +22,7 @@ function VerifyBox({ b, busy, onVerify }: { b: AdminBooking; busy: boolean; onVe
         <img src={adminApi.proofUrl(p.proofId)} alt={`Payment screenshot for ${b.bookingId}`} loading="lazy" />
       </a>}
       <div className="verify-actions">
-        <button className="btn primary" disabled={busy} onClick={() => onVerify('approve')}>✓ Payment received</button>
+        <button className="btn primary" disabled={busy} onClick={() => onVerify('approve')}>✓ Mark paid</button>
         <button className="btn" disabled={busy} onClick={() => onVerify('reject')}>Reject</button>
       </div>
     </div>
@@ -125,7 +125,7 @@ export function BookingsPanel({ refreshKey, onError, toast }: { refreshKey: numb
                     {b.status !== 'payment_submitted' && p.gateway === 'upi' && p.paymentId && p.proofId && <small><a href={adminApi.proofUrl(p.proofId)} target="_blank" rel="noopener">View payment screenshot ↗</a></small>}
                   </td>
                   <td data-label="Status">
-                    {b.status === 'payment_submitted' ? <span className="status-select payment_submitted">Payment to verify</span> : <select className={`status-select ${b.status}`} aria-label={`Status for ${b.bookingId}`} value={b.status} disabled={saving === b.bookingId}
+                    {b.status === 'payment_submitted' ? <span className="status-select payment_submitted">Payment submitted – verify</span> : <select className={`status-select ${b.status}`} aria-label={`Status for ${b.bookingId}`} value={b.status} disabled={saving === b.bookingId}
                       onChange={(e) => changeStatus(b, e.target.value as Status)}>
                       {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>}
